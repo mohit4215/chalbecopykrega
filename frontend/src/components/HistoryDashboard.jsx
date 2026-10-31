@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { History, FileText, ChevronRight, Clock, ShieldCheck, AlertTriangle, ShieldAlert, RefreshCw } from 'lucide-react';
+import { History, FileText, ChevronRight, Clock, ShieldCheck, AlertTriangle, ShieldAlert, RefreshCw, Download, Loader2 } from 'lucide-react';
 
 export default function HistoryDashboard({ onSelectReport, onNewScan }) {
   const { authFetch, user } = useAuth();
   const [historyItems, setHistoryItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [downloadingId, setDownloadingId] = useState(null);
 
   const fetchHistory = async () => {
     setLoading(true);
@@ -22,6 +23,32 @@ export default function HistoryDashboard({ onSelectReport, onNewScan }) {
       setError(err.message || 'Error loading scan history.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDownloadItemPDF = async (item) => {
+    if (!item?.id) return;
+    setDownloadingId(item.id);
+    try {
+      const res = await authFetch(`/api/export-report/${item.id}`);
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || `Download failed with HTTP ${res.status}`);
+      }
+      const blob = await res.blob();
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      const safeTitle = (item.filename || 'Document').replace(/[^a-zA-Z0-9_-]/g, '_');
+      link.download = `Originality_Report_${safeTitle}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(downloadUrl);
+    } catch (err) {
+      alert(`Could not download PDF report: ${err.message}`);
+    } finally {
+      setDownloadingId(null);
     }
   };
 
@@ -155,7 +182,7 @@ export default function HistoryDashboard({ onSelectReport, onNewScan }) {
               {historyItems.map((item) => (
                 <tr
                   key={item.id}
-                  onClick={() => item.report && onSelectReport(item.report)}
+                  onClick={() => item.report && onSelectReport({ ...item.report, scan_id: item.id })}
                   className="hover:bg-slate-50/80 cursor-pointer transition group"
                 >
                   <td className="py-4 px-4">
@@ -186,16 +213,28 @@ export default function HistoryDashboard({ onSelectReport, onNewScan }) {
                   </td>
 
                   <td className="py-4 px-4 text-right whitespace-nowrap">
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (item.report) onSelectReport(item.report);
-                      }}
-                      className="inline-flex items-center gap-1 text-xs font-bold text-indigo-600 group-hover:text-indigo-800 transition"
-                    >
-                      View Report <ChevronRight className="w-3.5 h-3.5" />
-                    </button>
+                    <div className="flex items-center justify-end gap-2" onClick={(e) => e.stopPropagation()}>
+                      <button
+                        type="button"
+                        onClick={() => handleDownloadItemPDF(item)}
+                        disabled={downloadingId === item.id}
+                        className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition"
+                        title="Download PDF Originality Report"
+                      >
+                        {downloadingId === item.id ? (
+                          <Loader2 className="w-4 h-4 animate-spin text-indigo-600" />
+                        ) : (
+                          <Download className="w-4 h-4" />
+                        )}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => item.report && onSelectReport({ ...item.report, scan_id: item.id })}
+                        className="inline-flex items-center gap-1 text-xs font-bold text-indigo-600 hover:text-indigo-800 transition ml-1"
+                      >
+                        View Report <ChevronRight className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}

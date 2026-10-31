@@ -10,7 +10,9 @@ import {
   Sparkles,
   Zap,
   LogOut, 
-  X
+  X,
+  Download,
+  Loader2
 } from 'lucide-react';
 
 import UploadComponent from './components/UploadComponent';
@@ -25,10 +27,11 @@ import LoginForm from './components/LoginForm';
 import RegisterForm from './components/RegisterForm';
 
 function MainApp() {
-  const { user, isAuthenticated, logout, updateUserCredits, refreshUser } = useAuth();
+  const { user, isAuthenticated, logout, updateUserCredits, refreshUser, authFetch } = useAuth();
   const [activeTab, setActiveTab] = useState('scan'); // 'scan' | 'history' | 'report' | 'pricing' | 'billing'
   const [report, setReport] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
   const [selectedMatch, setSelectedMatch] = useState(null);
   const [isDiffOpen, setIsDiffOpen] = useState(false);
   const [authModal, setAuthModal] = useState(null); // null | 'login' | 'register'
@@ -59,6 +62,36 @@ function MainApp() {
 
   const handlePrint = () => {
     window.print();
+  };
+
+  const handleDownloadPDF = async () => {
+    if (!report?.scan_id) {
+      alert("Report ID not found. Please select this report from Scan History or scan the document again.");
+      return;
+    }
+    setIsDownloadingPdf(true);
+    try {
+      const res = await authFetch(`/api/export-report/${report.scan_id}`);
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || `Server returned HTTP ${res.status}`);
+      }
+      const blob = await res.blob();
+      // Trigger native browser download without opening a blank tab
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      const safeTitle = (report.document_title || 'Document').replace(/[^a-zA-Z0-9_-]/g, '_');
+      link.download = `Originality_Report_${safeTitle}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(downloadUrl);
+    } catch (err) {
+      alert(`Could not download PDF report: ${err.message}`);
+    } finally {
+      setIsDownloadingPdf(false);
+    }
   };
 
   const isPro = user?.has_active_subscription || user?.subscription_tier === 'pro';
@@ -146,14 +179,30 @@ function MainApp() {
                 </button>
 
                 {report && activeTab === 'report' && (
-                  <button
-                    type="button"
-                    onClick={handlePrint}
-                    className="hidden md:flex px-3 py-1.5 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl items-center gap-1.5 transition"
-                  >
-                    <Printer className="w-3.5 h-3.5" />
-                    <span>Print</span>
-                  </button>
+                  <>
+                    <button
+                      type="button"
+                      onClick={handleDownloadPDF}
+                      disabled={isDownloadingPdf}
+                      className="hidden sm:flex px-3 py-1.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 rounded-xl items-center gap-1.5 shadow-sm transition"
+                      title="Download PDF Originality Report"
+                    >
+                      {isDownloadingPdf ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <Download className="w-3.5 h-3.5" />
+                      )}
+                      <span>{isDownloadingPdf ? 'Exporting...' : 'PDF Report'}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handlePrint}
+                      className="hidden md:flex px-3 py-1.5 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl items-center gap-1.5 transition"
+                    >
+                      <Printer className="w-3.5 h-3.5" />
+                      <span>Print</span>
+                    </button>
+                  </>
                 )}
 
                 {/* Credits / Tier Badge */}
@@ -284,13 +333,29 @@ function MainApp() {
                   </div>
                 </div>
 
-                <div className="flex items-center gap-4">
-                  <div className="text-right">
+                <div className="flex flex-wrap items-center gap-3">
+                  <div className="text-right mr-1">
                     <div className="text-3xl font-black text-slate-900">
                       {report.overall_score}%
                     </div>
                     <div className="text-[10px] uppercase font-bold text-slate-400">Similarity Index</div>
                   </div>
+
+                  <button
+                    type="button"
+                    onClick={handleDownloadPDF}
+                    disabled={isDownloadingPdf}
+                    className="px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 rounded-xl flex items-center gap-2 shadow-sm shadow-indigo-100 transition active:scale-95"
+                    title="Generate and download publication-ready PDF originality audit"
+                  >
+                    {isDownloadingPdf ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Download className="w-4 h-4" />
+                    )}
+                    <span>{isDownloadingPdf ? 'Generating PDF...' : 'Download PDF Report'}</span>
+                  </button>
+
                   <button
                     type="button"
                     onClick={() => setActiveTab('scan')}

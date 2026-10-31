@@ -2,8 +2,10 @@ import os
 import uuid
 import tempfile
 import shutil
+import io
 from typing import Optional, List, Dict, Any
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Depends, Request, Header, status
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Depends, Request, Header, Query, status
+from fastapi.responses import StreamingResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import select
@@ -16,9 +18,11 @@ from app.services.auth import (
     hash_password,
     verify_password,
     create_access_token,
-    get_current_user
+    get_current_user,
+    get_optional_current_user
 )
 from app.services.stripe_service import StripeService, PLANS
+from app.services.pdf_generator import PDFReportGenerator
 from app.services.ingestion_pipeline import (
     DocumentExtractionPipeline,
     ExtractionResult,
@@ -379,8 +383,9 @@ async def check_plagiarism_monetized(
             source_category=match_item.get("source_category", "Internet Source")
         ))
 
+    new_scan_id = str(uuid.uuid4())
     response_payload = CheckPlagiarismResponse(
-        scan_id=None,
+        scan_id=new_scan_id,
         document_id=doc_id,
         document_title=filename,
         overall_score=scan_report["overall_plagiarism_percentage"],
@@ -398,9 +403,9 @@ async def check_plagiarism_monetized(
         matches=formatted_matches
     )
 
-    # 5. Persist to ScanHistory
+    # 5. Persist to ScanHistory with scan_id embedded
     scan_record = ScanHistory(
-        id=str(uuid.uuid4()),
+        id=new_scan_id,
         user_id=current_user.id,
         filename=filename,
         overall_score=scan_report["overall_plagiarism_percentage"],
@@ -409,11 +414,10 @@ async def check_plagiarism_monetized(
     db.add(scan_record)
     await db.commit()
 
-    response_payload.scan_id = scan_record.id
     return response_payload
 
 # ------------------------------------------------------------------------------
-# History Endpoints
+# History & PDF Export Endpoints
 # ------------------------------------------------------------------------------
 
 @app.get("/api/history", response_model=List[ScanHistoryItem])
@@ -424,15 +428,104 @@ async def get_user_scan_history(
     query = select(ScanHistory).where(ScanHistory.user_id == current_user.id).order_by(ScanHistory.created_at.desc())
     res = await db.execute(query)
     scans = res.scalars().all()
-    return [
-        ScanHistoryItem(
-            id=s.id,
-            filename=s.filename,
-            overall_score=round(s.overall_score, 2),
-            created_at=s.created_at.isoformat(),
-            report=s.report_json
-        ) for s in scans
-    ]
+    
+    history_items = []
+    for s in scans:
+        report_data = dict(s.report_json) if s.report_json else {}
+        if not report_data.get("scan_id"):
+            report_data["scan_id"] = s.id
+        history_items.append(
+            ScanHistoryItem(
+                id=s.id,
+                filename=s.filename,
+                overall_score=round(s.overall_score, 2),
+                created_at=s.created_at.isoformat(),
+                report=report_data
+            )
+        )
+    return history_items
+
+@app.get("/api/export-report/{scan_id}")
+async def export_pdf_report(
+    scan_id: str,
+    token: Optional[str] = Query(None, description="Optional JWT token query parameter for browser direct downloads"),
+    current_user_from_header: Optional[User] = Depends(get_optional_current_user),
+    db: AsyncSession = Depends(get_db_session)
+):
+    """
+    Dynamically generates and streams a formal PDF Originality Report.
+    Authenticates via Authorization: Bearer header OR ?token= query parameter.
+    """
+    user = current_user_from_header
+
+    # Fallback to query parameter token (allows browser window.open / <a> download triggers)
+    if not user and token:
+        try:
+            from jose import jwt
+            from app.services.auth import SECRET_KEY, ALGORITHM
+            payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+            user_email: str = payload.get("sub")
+            if user_email:
+                q = select(User).where(User.email == user_email)
+                res = await db.execute(q)
+                user = res.scalar_one_or_none()
+        except Exception:
+            pass
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required to export reports.",
+            headers={"WWW-Authenticate": "Bearer"}
+        )
+
+    # Retrieve scan report from database
+    query = select(ScanHistory).where(ScanHistory.id == scan_id)
+    result = await db.execute(query)
+    scan_record = result.scalar_one_or_none()
+
+    if not scan_record:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Report with ID '{scan_id}' was not found."
+        )
+
+    # Security check: User must own the scan report
+    if scan_record.user_id != user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You are not authorized to download this report."
+        )
+
+    # Generate PDF bytes via PDFReportGenerator (xhtml2pdf / ReportLab)
+    try:
+        report_dict = scan_record.report_json or {}
+        pdf_bytes = PDFReportGenerator.generate_pdf_bytes(
+            report_data=report_dict,
+            user_email=user.email,
+            filename=scan_record.filename,
+            scan_id=scan_record.id
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate PDF report: {str(e)}"
+        )
+
+    # Format attachment filename
+    safe_filename = "".join(c for c in scan_record.filename if c.isalnum() or c in ("-", "_", ".")).strip()
+    if not safe_filename.lower().endswith(".pdf"):
+        safe_filename = f"{safe_filename}.pdf"
+    content_disp = f'attachment; filename="Originality_Report_{safe_filename}"'
+
+    return StreamingResponse(
+        io.BytesIO(pdf_bytes),
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": content_disp,
+            "Content-Type": "application/pdf"
+        }
+    )
 
 @app.get("/api/health")
 async def health_check():
