@@ -1,47 +1,47 @@
 import React, { useMemo } from 'react';
-import { ExternalLink, Info } from 'lucide-react';
+import { FileText, Eye } from 'lucide-react';
 
 export default function DocumentViewer({ 
-  rawText, 
+  fullText, 
   matches = [], 
   selectedMatchId, 
   onSelectMatch 
 }) {
   /**
-   * Slice rawText into non-overlapping highlighted and unhighlighted fragments
-   * based on the exact start_char and end_char intervals returned by the backend.
+   * Slices fullText into non-overlapping plain and highlighted segments
+   * using start_index and end_index from the API response.
    */
-  const renderedSegments = useMemo(() => {
-    if (!rawText) return [];
+  const textSegments = useMemo(() => {
+    if (!fullText) return [];
     if (!matches || matches.length === 0) {
-      return [{ type: 'plain', text: rawText, key: 'plain-all' }];
+      return [{ type: 'plain', text: fullText, key: 'plain-0' }];
     }
 
-    const textLen = rawText.length;
-    // Collect all critical boundary points
-    const pointSet = new Set([0, textLen]);
+    const textLen = fullText.length;
+    const boundaryPoints = new Set([0, textLen]);
+
     matches.forEach(m => {
-      const s = Math.max(0, Math.min(m.start_char, textLen));
-      const e = Math.max(0, Math.min(m.end_char, textLen));
-      if (s < e) {
-        pointSet.add(s);
-        pointSet.add(e);
+      const start = Math.max(0, Math.min(m.start_index, textLen));
+      const end = Math.max(0, Math.min(m.end_index, textLen));
+      if (start < end) {
+        boundaryPoints.add(start);
+        boundaryPoints.add(end);
       }
     });
 
-    const sortedPoints = Array.from(pointSet).sort((a, b) => a - b);
+    const sortedPoints = Array.from(boundaryPoints).sort((a, b) => a - b);
     const segments = [];
 
     for (let i = 0; i < sortedPoints.length - 1; i++) {
       const pStart = sortedPoints[i];
       const pEnd = sortedPoints[i + 1];
-      const sliceText = rawText.substring(pStart, pEnd);
+      const sliceText = fullText.substring(pStart, pEnd);
 
       if (!sliceText) continue;
 
-      // Find all matches that contain this entire slice [pStart, pEnd]
+      // Find all matches that encompass this slice
       const coveringMatches = matches.filter(
-        m => m.start_char <= pStart && m.end_char >= pEnd
+        m => m.start_index <= pStart && m.end_index >= pEnd
       );
 
       if (coveringMatches.length === 0) {
@@ -51,10 +51,10 @@ export default function DocumentViewer({
           key: `plain-${pStart}-${pEnd}`
         });
       } else {
-        // Pick primary match (favor exact > paraphrase, or highest similarity)
-        const primaryMatch = coveringMatches.reduce((prev, curr) => {
-          if (curr.match_type === 'exact' && prev.match_type !== 'exact') return curr;
-          return (curr.similarity_score > prev.similarity_score) ? curr : prev;
+        // Pick primary match (prioritize exact_copy or highest similarity score)
+        const primaryMatch = coveringMatches.reduce((best, curr) => {
+          if (curr.match_type === 'exact_copy' && best.match_type !== 'exact_copy') return curr;
+          return (curr.similarity_score > best.similarity_score) ? curr : best;
         }, coveringMatches[0]);
 
         segments.push({
@@ -67,47 +67,48 @@ export default function DocumentViewer({
     }
 
     return segments;
-  }, [rawText, matches]);
+  }, [fullText, matches]);
 
-  const getHighlightClasses = (match, isSelected) => {
-    let base = "cursor-pointer rounded px-0.5 py-0.5 transition-all duration-150 inline font-medium ";
-    
-    if (match.match_type === 'exact') {
-      base += isSelected 
-        ? "bg-red-200 text-red-950 ring-2 ring-red-600 shadow-sm underline decoration-red-600 " 
-        : "bg-red-100 text-red-900 border-b-2 border-red-400 hover:bg-red-200 ";
+  const getHighlightClass = (match, isSelected) => {
+    let classes = "cursor-pointer rounded px-1 py-0.5 transition-all duration-150 inline font-medium ";
+
+    if (match.match_type === 'exact_copy' || match.similarity_score >= 0.92) {
+      classes += isSelected
+        ? "bg-rose-200 text-rose-950 ring-2 ring-rose-600 shadow-sm underline decoration-rose-600 "
+        : "bg-rose-100 text-rose-900 border-b-2 border-rose-400 hover:bg-rose-200 ";
     } else if (match.match_type === 'paraphrase') {
-      base += isSelected 
-        ? "bg-amber-200 text-amber-950 ring-2 ring-amber-600 shadow-sm underline decoration-amber-600 " 
+      classes += isSelected
+        ? "bg-amber-200 text-amber-950 ring-2 ring-amber-600 shadow-sm underline decoration-amber-600 "
         : "bg-amber-100 text-amber-900 border-b-2 border-amber-400 hover:bg-amber-200 ";
     } else {
-      // Web match
-      base += isSelected 
-        ? "bg-blue-200 text-blue-950 ring-2 ring-blue-600 shadow-sm underline decoration-blue-600 " 
+      // Internet / Web source
+      classes += isSelected
+        ? "bg-blue-200 text-blue-950 ring-2 ring-blue-600 shadow-sm underline decoration-blue-600 "
         : "bg-blue-100 text-blue-900 border-b-2 border-blue-400 hover:bg-blue-200 ";
     }
 
-    return base;
+    return classes;
   };
 
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col h-full">
+    <div className="bg-white rounded-2xl shadow-sm border border-slate-200 flex flex-col h-full overflow-hidden">
       {/* Viewer Header */}
-      <div className="px-6 py-4 bg-slate-50/70 border-b border-slate-200 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+      <div className="px-6 py-4 bg-slate-50/80 border-b border-slate-200 flex items-center justify-between">
+        <div className="flex items-center gap-2.5">
+          <FileText className="w-4 h-4 text-slate-500" />
+          <span className="text-xs font-bold uppercase tracking-wider text-slate-600">
             Document Originality Viewer
           </span>
-          <span className="text-xs px-2 py-0.5 rounded bg-slate-200 text-slate-700 font-medium">
-            {matches.length} Matched Clusters
+          <span className="text-xs px-2 py-0.5 rounded-full bg-slate-200 text-slate-700 font-semibold">
+            {matches.length} Matched Sections
           </span>
         </div>
 
         {/* Legend */}
-        <div className="flex items-center gap-4 text-xs font-medium text-slate-600">
+        <div className="flex items-center gap-3 text-xs font-semibold text-slate-600">
           <span className="flex items-center gap-1.5">
-            <span className="w-2.5 h-2.5 rounded bg-red-400 inline-block"></span>
-            Exact Match
+            <span className="w-2.5 h-2.5 rounded bg-rose-400 inline-block"></span>
+            Exact Copy
           </span>
           <span className="flex items-center gap-1.5">
             <span className="w-2.5 h-2.5 rounded bg-amber-400 inline-block"></span>
@@ -115,29 +116,30 @@ export default function DocumentViewer({
           </span>
           <span className="flex items-center gap-1.5">
             <span className="w-2.5 h-2.5 rounded bg-blue-400 inline-block"></span>
-            Internet Source
+            Web Source
           </span>
         </div>
       </div>
 
-      {/* Document Paper Body */}
-      <div className="flex-1 overflow-y-auto p-8 sm:p-12 bg-white font-serif text-slate-800 leading-relaxed text-base tracking-normal">
-        <div className="max-w-3xl mx-auto whitespace-pre-wrap selection:bg-indigo-100">
-          {renderedSegments.map(segment => {
-            if (segment.type === 'plain') {
-              return <span key={segment.key}>{segment.text}</span>;
+      {/* Main Document Body */}
+      <div className="flex-1 overflow-y-auto p-8 sm:p-12 font-serif text-slate-800 text-base leading-relaxed select-text">
+        <div className="max-w-3xl mx-auto whitespace-pre-wrap">
+          {textSegments.map(seg => {
+            if (seg.type === 'plain') {
+              return <span key={seg.key}>{seg.text}</span>;
             }
 
-            const isSelected = selectedMatchId === segment.match.id;
+            const isSelected = selectedMatchId === seg.match.id;
+
             return (
               <mark
-                key={segment.key}
-                id={`match-span-${segment.match.id}`}
-                onClick={() => onSelectMatch(segment.match)}
-                className={getHighlightClasses(segment.match, isSelected)}
-                title={`Matched with: ${segment.match.source_title} (${(segment.match.similarity_score * 100).toFixed(0)}%)`}
+                key={seg.key}
+                id={`highlight-${seg.match.id}`}
+                onClick={() => onSelectMatch(seg.match)}
+                className={getHighlightClass(seg.match, isSelected)}
+                title={`Source: ${seg.match.source_title} (${(seg.match.similarity_score * 100).toFixed(0)}% match)`}
               >
-                {segment.text}
+                {seg.text}
               </mark>
             );
           })}
