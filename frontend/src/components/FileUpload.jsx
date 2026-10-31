@@ -74,7 +74,11 @@ export default function FileUpload({ onScanComplete, isLoading, setIsLoading }) 
       formData.append('exclude_bibliography', excludeBib ? 'true' : 'false');
       formData.append('enable_web_search', enableWeb ? 'true' : 'false');
 
-      const response = await fetch('/api/scan', {
+      const apiEndpoint = import.meta.env.VITE_API_URL 
+        ? `${import.meta.env.VITE_API_URL.replace(/\/+$/, '')}/api/scan`
+        : '/api/scan';
+
+      const response = await fetch(apiEndpoint, {
         method: 'POST',
         body: formData,
       });

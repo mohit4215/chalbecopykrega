@@ -239,3 +239,12 @@ async def list_indexed_documents():
             "category": d.get("category", "Submitted Works")
         })
     return docs
+
+# Optional Static Files Mount (serves frontend if built in production)
+import os
+from fastapi.staticfiles import StaticFiles
+
+static_dist_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../frontend/dist"))
+if os.path.isdir(static_dist_path):
+    app.mount("/", StaticFiles(directory=static_dist_path, html=True), name="static")
+
