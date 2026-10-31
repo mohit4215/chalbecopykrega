@@ -1,0 +1,28 @@
+services:
+  # Backend API Service
+  - type: web
+    name: plagiarism-checker-backend
+    runtime: python
+    region: oregon
+    plan: standard
+    buildCommand: "pip install -r backend/requirements.txt"
+    startCommand: "cd backend && uvicorn app.main:app --host 0.0.0.0 --port $PORT"
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.8
+      - key: USE_IN_MEMORY_FALLBACK
+        value: "true"
+      - key: EMBEDDING_MODEL_NAME
+        value: "sentence-transformers/all-MiniLM-L6-v2"
+
+  # Frontend Web Service
+  - type: web
+    name: plagiarism-checker-frontend
+    runtime: static
+    region: oregon
+    buildCommand: "cd frontend && npm install && npm run build"
+    staticPublishPath: "./frontend/dist"
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
