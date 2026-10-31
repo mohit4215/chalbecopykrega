@@ -1,10 +1,10 @@
 services:
   # Backend API Service
   - type: web
-    name: plagiarism-checker-backend
+    name: chalbecopykrega-api
     runtime: python
     region: oregon
-    plan: standard
+    plan: free
     buildCommand: "pip install -r backend/requirements.txt"
     startCommand: "cd backend && uvicorn app.main:app --host 0.0.0.0 --port $PORT"
     envVars:
@@ -17,11 +17,18 @@ services:
 
   # Frontend Web Service
   - type: web
-    name: plagiarism-checker-frontend
+    name: chalbecopykrega-app
     runtime: static
     region: oregon
+    plan: free
     buildCommand: "cd frontend && npm install && npm run build"
     staticPublishPath: "./frontend/dist"
+    envVars:
+      - key: VITE_API_URL
+        fromService:
+          type: web
+          name: chalbecopykrega-api
+          property: host
     routes:
       - type: rewrite
         source: /*
