@@ -7,7 +7,28 @@ version: '3.8'
 
 services:
   # ----------------------------------------------------------------------------
-  # 1. Vector Database Service (Qdrant)
+  # 1. Distributed Cache & Rate Limiter (Redis)
+  # ----------------------------------------------------------------------------
+  redis:
+    image: redis:7.2-alpine
+    container_name: plagiarism_redis
+    restart: always
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - plagiarism_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+  # ----------------------------------------------------------------------------
+  # 2. Vector Database Service (Qdrant)
   # ----------------------------------------------------------------------------
   vector-db:
     image: qdrant/qdrant:v1.8.4
@@ -32,7 +53,7 @@ services:
       start_period: 15s
 
   # ----------------------------------------------------------------------------
-  # 2. FastAPI NLP & Plagiarism Detection Backend
+  # 3. FastAPI NLP & Plagiarism Detection Backend
   # ----------------------------------------------------------------------------
   backend:
     build:
@@ -43,8 +64,11 @@ services:
     depends_on:
       vector-db:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     environment:
       - PORT=8000
+      - REDIS_URL=redis://redis:6379/0
       - QDRANT_URL=http://vector-db:6333
       - QDRANT_COLLECTION_NAME=student_submissions
       - USE_IN_MEMORY_FALLBACK=false
@@ -101,6 +125,8 @@ networks:
 # Persistent Data Volumes
 # ------------------------------------------------------------------------------
 volumes:
+  redis_data:
+    name: plagiarism_redis_data
   qdrant_storage:
     name: plagiarism_qdrant_data
   model_cache:

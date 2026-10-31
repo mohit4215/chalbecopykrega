@@ -39,6 +39,14 @@ from app.services.core_engine import (
     CoreNLPMatcher,
     PlagiarismDetectionEngine
 )
+from app.services.security import (
+    validate_secure_file_upload,
+    SecurityHeadersMiddleware,
+    RateLimitingManager,
+    SafeRateLimiter,
+    user_rate_limit_identifier,
+    ip_rate_limit_identifier
+)
 
 # Initialize FastAPI application
 app = FastAPI(
@@ -47,14 +55,27 @@ app = FastAPI(
     version="4.0.0"
 )
 
-# Configure CORS for React frontend
+# ------------------------------------------------------------------------------
+# Security Architecture: Hardened CORS & Enterprise HTTP Security Headers
+# ------------------------------------------------------------------------------
+
+raw_origins = os.getenv(
+    "CORS_ORIGINS",
+    "http://localhost:3000,http://localhost:5173,https://chalbecopykrega-app.onrender.com"
+)
+allowed_origins = [o.strip() for o in raw_origins.split(",") if o.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=allowed_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD"],
+    allow_headers=["Authorization", "Content-Type", "Accept", "Origin", "X-Requested-With", "stripe-signature"],
+    expose_headers=["Content-Disposition", "Content-Length", "X-RateLimit-Limit", "X-RateLimit-Remaining", "X-RateLimit-Reset"]
 )
+
+# Enforce HTTP security headers (CSP, HSTS, X-Content-Type-Options nosniff, X-Frame-Options DENY)
+app.add_middleware(SecurityHeadersMiddleware)
 
 # ------------------------------------------------------------------------------
 # Pydantic Schemas
@@ -188,6 +209,9 @@ plagiarism_engine = PlagiarismDetectionEngine(
 @app.on_event("startup")
 async def on_startup():
     await init_db()
+    # Initialize Redis-backed rate limiting (gracefully falls back if Redis is not running)
+    await RateLimitingManager.init()
+
     # Pre-seed internal database with reference papers
     sample_text_chunks = [
         "Deep learning is a subset of machine learning, which is essentially a neural network with three or more layers. These neural networks attempt to simulate the behavior of the human brain.",
@@ -202,10 +226,15 @@ async def on_startup():
     )
 
 # ------------------------------------------------------------------------------
-# Authentication Routes
+# Authentication Routes (Protected by IP Rate Limiting: 10 req/min)
 # ------------------------------------------------------------------------------
 
-@app.post("/api/register", response_model=AuthTokenResponse, status_code=status.HTTP_201_CREATED)
+@app.post(
+    "/api/register",
+    response_model=AuthTokenResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(SafeRateLimiter(times=10, seconds=60, identifier=ip_rate_limit_identifier))]
+)
 async def register_user(payload: RegisterRequest, db: AsyncSession = Depends(get_db_session)):
     existing = await db.execute(select(User).where(User.email == payload.email))
     if existing.scalar_one_or_none():
@@ -235,7 +264,11 @@ async def register_user(payload: RegisterRequest, db: AsyncSession = Depends(get
         user=UserResponse(**new_user.to_dict())
     )
 
-@app.post("/api/login", response_model=AuthTokenResponse)
+@app.post(
+    "/api/login",
+    response_model=AuthTokenResponse,
+    dependencies=[Depends(SafeRateLimiter(times=10, seconds=60, identifier=ip_rate_limit_identifier))]
+)
 async def login_user(payload: LoginRequest, db: AsyncSession = Depends(get_db_session)):
     res = await db.execute(select(User).where(User.email == payload.email))
     user = res.scalar_one_or_none()
@@ -334,9 +367,13 @@ async def stripe_webhook(
 # Protected Plagiarism Check Endpoint with Usage & Credit Enforcement
 # ------------------------------------------------------------------------------
 
-@app.post("/api/check-plagiarism", response_model=CheckPlagiarismResponse)
+@app.post(
+    "/api/check-plagiarism",
+    response_model=CheckPlagiarismResponse,
+    dependencies=[Depends(SafeRateLimiter(times=5, seconds=60, identifier=user_rate_limit_identifier))]
+)
 async def check_plagiarism_monetized(
-    file: UploadFile = File(..., description="Uploaded document (PDF, DOCX, or TXT)"),
+    file: UploadFile = Depends(validate_secure_file_upload),
     enable_web_search: bool = Form(True, description="Enable live internet cross-referencing"),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session)
