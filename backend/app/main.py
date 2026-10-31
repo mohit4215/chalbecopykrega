@@ -47,6 +47,8 @@ from app.services.security import (
     user_rate_limit_identifier,
     ip_rate_limit_identifier
 )
+from app.tasks.celery_worker import celery_app, process_plagiarism_document
+from celery.result import AsyncResult
 
 # Initialize FastAPI application
 app = FastAPI(
@@ -191,6 +193,21 @@ class ScanHistoryItem(BaseModel):
     overall_score: float
     created_at: str
     report: Optional[Dict[str, Any]] = None
+
+class TaskSubmissionResponse(BaseModel):
+    task_id: str
+    status: str
+    message: str
+    filename: str
+
+class TaskStatusResponse(BaseModel):
+    task_id: str
+    status: str  # 'pending', 'processing', 'success', 'failure'
+    step: Optional[str] = None
+    progress: int = 0
+    message: Optional[str] = None
+    report: Optional[Dict[str, Any]] = None
+    error: Optional[str] = None
 
 # ------------------------------------------------------------------------------
 # Singletons & Startup Lifecycle
@@ -364,29 +381,28 @@ async def stripe_webhook(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 # ------------------------------------------------------------------------------
-# Protected Plagiarism Check Endpoint with Usage & Credit Enforcement
+# Asynchronous Background Task Plagiarism Scanning & Polling Endpoints
 # ------------------------------------------------------------------------------
 
 @app.post(
     "/api/check-plagiarism",
-    response_model=CheckPlagiarismResponse,
+    response_model=TaskSubmissionResponse,
+    status_code=status.HTTP_202_ACCEPTED,
     dependencies=[Depends(SafeRateLimiter(times=5, seconds=60, identifier=user_rate_limit_identifier))]
 )
-async def check_plagiarism_monetized(
+async def check_plagiarism_async(
     file: UploadFile = Depends(validate_secure_file_upload),
     enable_web_search: bool = Form(True, description="Enable live internet cross-referencing"),
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db_session)
+    current_user: User = Depends(get_current_user)
 ):
     """
-    Monetized Plagiarism Scanning Endpoint:
+    Asynchronous Plagiarism Scanning Endpoint:
       1. Verifies that user has an active Pro subscription OR > 0 scan credits
-      2. Ingests and processes the document
-      3. Deducts 1 scan credit upon success (or allows unlimited for Pro subscribers)
-      4. Persists the report to ScanHistory
-      5. Returns full results with remaining credit balance
+      2. Uploads file to secure temporary storage directory
+      3. Dispatches job to Celery distributed worker pool
+      4. Immediately returns task_id (HTTP 202 Accepted) for client progress polling
     """
-    # Usage Enforcement Check
+    # 1. Usage & Entitlement Enforcement
     if not current_user.can_scan:
         raise HTTPException(
             status_code=status.HTTP_402_PAYMENT_REQUIRED,
@@ -394,109 +410,125 @@ async def check_plagiarism_monetized(
         )
 
     filename = file.filename or "Uploaded_Document.txt"
-    file_ext = os.path.splitext(filename)[1].lower()
+    file_ext = os.path.splitext(filename)[1].lower() or ".txt"
 
-    if file_ext not in [".pdf", ".docx", ".txt", ".md", ".rtf"]:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Unsupported format '{file_ext}'. Supported formats: PDF, DOCX, and TXT."
-        )
-
-    # 1. Save uploaded file to temporary path
-    with tempfile.NamedTemporaryFile(suffix=file_ext, delete=False) as temp_file:
-        temp_path = temp_file.name
-        shutil.copyfileobj(file.file, temp_file)
+    # 2. Stage uploaded file to disk for worker process ingestion
+    upload_dir = os.path.join(tempfile.gettempdir(), "plagiarism_async_uploads")
+    os.makedirs(upload_dir, exist_ok=True)
+    temp_file_name = f"{uuid.uuid4().hex}_{filename}"
+    temp_storage_path = os.path.join(upload_dir, temp_file_name)
 
     try:
-        extraction_result: ExtractionResult = ingestion_pipeline.ingest_document(temp_path)
-    except UnsupportedFormatError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-    except (CorruptedFileError, EmptyDocumentError) as e:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
-    except IngestionPipelineError as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
-    finally:
-        if os.path.exists(temp_path):
-            os.remove(temp_path)
-
-    chunks = extraction_result.chunks
-    chunk_strings = [c.text for c in chunks]
-
-    if not chunk_strings:
+        with open(temp_storage_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+    except Exception as e:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Document text is too brief to generate meaningful NLP chunks for scanning."
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to stage file for worker processing: {str(e)}"
         )
 
-    # 2. Run Core Detection Engine
-    doc_id = str(uuid.uuid4())
-    scan_report = await plagiarism_engine.scan_document_chunks(
-        document_id=doc_id,
-        document_title=filename,
-        chunks=chunk_strings,
-        enable_web_search=enable_web_search
+    # 3. Dispatch Job to Celery Distributed Task Worker
+    try:
+        task = process_plagiarism_document.delay(
+            temp_file_path=temp_storage_path,
+            filename=filename,
+            user_id=current_user.id,
+            enable_web_search=enable_web_search
+        )
+        task_id = task.id
+    except Exception as e:
+        logger.warning(f"Celery dispatch failed ({e}). Running task synchronously via eager fallback.")
+        try:
+            # Fallback to direct synchronous execution if Celery broker is offline
+            task_result = process_plagiarism_document(
+                temp_file_path=temp_storage_path,
+                filename=filename,
+                user_id=current_user.id,
+                enable_web_search=enable_web_search
+            )
+            # Store in local task memory or return completed
+            sync_id = f"sync_{uuid.uuid4().hex[:12]}"
+            return TaskSubmissionResponse(
+                task_id=sync_id,
+                status="processing",
+                message="Document accepted and processed.",
+                filename=filename
+            )
+        except Exception as sync_err:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Document processing failed: {str(sync_err)}"
+            )
+
+    return TaskSubmissionResponse(
+        task_id=task_id,
+        status="processing",
+        message="Document queued for asynchronous plagiarism analysis.",
+        filename=filename
     )
 
-    # 3. Usage Deduction (Deduct 1 credit for non-Pro users)
-    if not current_user.has_active_subscription:
-        current_user.scan_credits = max(0, current_user.scan_credits - 1)
-        db.add(current_user)
-        await db.commit()
-        await db.refresh(current_user)
+@app.get("/api/task-status/{task_id}", response_model=TaskStatusResponse)
+async def get_task_status(
+    task_id: str,
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Progress Polling Endpoint:
+    Checks Celery result backend for job state (pending, processing, success, failure),
+    reports incremental progress percentage and messages, and returns final originality report.
+    """
+    task_result = AsyncResult(task_id, app=celery_app)
+    state = task_result.state
 
-    # 4. Format Matches
-    formatted_matches: List[PlagiarismMatchDetail] = []
-    for idx, match_item in enumerate(scan_report.get("matches", [])):
-        chunk_idx = match_item["chunk_index"]
-        corresponding_chunk = chunks[chunk_idx]
+    if state == "PENDING":
+        return TaskStatusResponse(
+            task_id=task_id,
+            status="pending",
+            step="queued",
+            progress=5,
+            message="Job queued in worker pool..."
+        )
 
-        formatted_matches.append(PlagiarismMatchDetail(
-            id=f"match_{idx}_{uuid.uuid4().hex[:6]}",
-            matched_text=corresponding_chunk.text,
-            start_index=corresponding_chunk.start_char,
-            end_index=corresponding_chunk.end_char,
-            similarity_score=match_item["confidence_score"],
-            match_type=match_item["match_type"],
-            source_title=match_item["source_title"],
-            source_url=match_item.get("source_url"),
-            source_id=match_item.get("source_id"),
-            source_author=match_item.get("source_author"),
-            source_snippet=match_item.get("source_snippet"),
-            source_category=match_item.get("source_category", "Internet Source")
-        ))
+    elif state == "PROGRESS":
+        meta = task_result.info if isinstance(task_result.info, dict) else {}
+        return TaskStatusResponse(
+            task_id=task_id,
+            status="processing",
+            step=meta.get("step", "processing"),
+            progress=int(meta.get("progress", 50)),
+            message=meta.get("message", "Processing document...")
+        )
 
-    new_scan_id = str(uuid.uuid4())
-    response_payload = CheckPlagiarismResponse(
-        scan_id=new_scan_id,
-        document_id=doc_id,
-        document_title=filename,
-        overall_score=scan_report["overall_plagiarism_percentage"],
-        originality_score=scan_report["originality_percentage"],
-        total_words=extraction_result.metadata.total_words,
-        total_characters=extraction_result.metadata.total_characters_cleaned,
-        remaining_credits=current_user.scan_credits,
-        subscription_tier=current_user.subscription_tier,
-        full_text=extraction_result.cleaned_text,
-        summary=PlagiarismSummary(
-            exact_matches_count=scan_report["summary"]["exact_matches_count"],
-            paraphrase_matches_count=scan_report["summary"]["paraphrase_matches_count"],
-            internet_matches_count=scan_report["summary"]["internet_matches_count"]
-        ),
-        matches=formatted_matches
-    )
+    elif state == "SUCCESS":
+        report_payload = task_result.result
+        return TaskStatusResponse(
+            task_id=task_id,
+            status="success",
+            step="completed",
+            progress=100,
+            message="Plagiarism analysis completed successfully!",
+            report=report_payload
+        )
 
-    # 5. Persist to ScanHistory with scan_id embedded
-    scan_record = ScanHistory(
-        id=new_scan_id,
-        user_id=current_user.id,
-        filename=filename,
-        overall_score=scan_report["overall_plagiarism_percentage"],
-        report_json=response_payload.dict()
-    )
-    db.add(scan_record)
-    await db.commit()
+    elif state == "FAILURE":
+        err_msg = str(task_result.info or "Document processing failed.")
+        return TaskStatusResponse(
+            task_id=task_id,
+            status="failure",
+            step="failed",
+            progress=0,
+            message=err_msg,
+            error=err_msg
+        )
 
-    return response_payload
+    else:
+        return TaskStatusResponse(
+            task_id=task_id,
+            status=state.lower(),
+            step="processing",
+            progress=50,
+            message="Processing document..."
+        )
 
 # ------------------------------------------------------------------------------
 # History & PDF Export Endpoints
