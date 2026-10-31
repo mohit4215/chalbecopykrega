@@ -73,7 +73,27 @@ async def get_current_user(
     if user is None:
         raise credentials_exception
 
+    if getattr(user, "is_banned", False):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Your account has been suspended by an administrator. Please contact support."
+        )
+
     return user
+
+async def get_admin_user(
+    current_user: User = Depends(get_current_user)
+) -> User:
+    """
+    FastAPI dependency that enforces Superadmin Role-Based Access Control (RBAC).
+    Guarantees only authorized administrator accounts can access management operations.
+    """
+    if not getattr(current_user, "is_admin", False):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access forbidden: Superadmin privileges required."
+        )
+    return current_user
 
 async def get_optional_current_user(
     token: Optional[str] = Depends(oauth2_scheme),

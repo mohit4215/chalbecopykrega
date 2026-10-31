@@ -25,6 +25,7 @@ import PricingPage from './components/PricingPage';
 import BillingDashboard from './components/BillingDashboard';
 import LoginForm from './components/LoginForm';
 import RegisterForm from './components/RegisterForm';
+import AdminDashboard from './components/admin/AdminDashboard';
 
 function MainApp() {
   const { user, isAuthenticated, logout, updateUserCredits, refreshUser, authFetch } = useAuth();
@@ -178,6 +179,23 @@ function MainApp() {
                   <span className="hidden sm:inline">Billing</span>
                 </button>
 
+                {/* Superadmin Navigation Pill */}
+                {user?.is_admin && (
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('admin')}
+                    className={`px-3 py-1.5 text-xs font-extrabold rounded-xl flex items-center gap-1.5 transition ${
+                      activeTab === 'admin'
+                        ? 'bg-purple-600 text-white shadow-sm shadow-purple-200'
+                        : 'text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200'
+                    }`}
+                    title="Superadmin Dashboard & User Management"
+                  >
+                    <ShieldCheck className="w-3.5 h-3.5 text-purple-600" />
+                    <span>Admin</span>
+                  </button>
+                )}
+
                 {report && activeTab === 'report' && (
                   <>
                     <button
@@ -258,7 +276,9 @@ function MainApp() {
 
       {/* Main Container Viewport */}
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 flex flex-col">
-        {activeTab === 'pricing' ? (
+        {activeTab === 'admin' && isAuthenticated ? (
+          <AdminDashboard onExitAdmin={() => setActiveTab('scan')} />
+        ) : activeTab === 'pricing' ? (
           <PricingPage
             onNeedLogin={() => setAuthModal('login')}
             onBillingSuccess={() => {

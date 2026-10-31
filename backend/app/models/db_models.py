@@ -1,20 +1,24 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import Column, String, Float, Integer, DateTime, ForeignKey, Text, JSON, func
+from sqlalchemy import Column, String, Float, Integer, Boolean, DateTime, ForeignKey, Text, JSON, func
 from sqlalchemy.orm import declarative_base, relationship
 
 Base = declarative_base()
 
 class User(Base):
     """
-    User account entity with Stripe SaaS monetization:
-    tracks subscription tiers, customer ID, and remaining scan credits.
+    User account entity with Stripe SaaS monetization & Superadmin RBAC:
+    tracks subscription tiers, customer ID, scan credits, and admin privileges.
     """
     __tablename__ = "users"
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     email = Column(String(255), unique=True, index=True, nullable=False)
     hashed_password = Column(String(255), nullable=False)
+    
+    # Role-Based Access Control (RBAC) & Account Status
+    is_admin = Column(Boolean, default=False, nullable=False)
+    is_banned = Column(Boolean, default=False, nullable=False)
     
     # Stripe Monetization Fields
     stripe_customer_id = Column(String(255), nullable=True, index=True)
@@ -35,12 +39,16 @@ class User(Base):
     @property
     def can_scan(self) -> bool:
         """Determines if the user has enough entitlement to initiate a plagiarism scan."""
+        if self.is_banned:
+            return False
         return self.has_active_subscription or self.scan_credits > 0
 
     def to_dict(self):
         return {
             "id": self.id,
             "email": self.email,
+            "is_admin": self.is_admin,
+            "is_banned": self.is_banned,
             "stripe_customer_id": self.stripe_customer_id,
             "subscription_tier": self.subscription_tier,
             "subscription_status": self.subscription_status,
