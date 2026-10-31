@@ -3,11 +3,22 @@ import uuid
 import tempfile
 import shutil
 from typing import Optional, List, Dict, Any
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException, status
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Depends, status
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, EmailStr, Field
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
+from app.models.db_models import User, ScanHistory
+from app.services.database import get_db_session, init_db
+from app.services.auth import (
+    hash_password,
+    verify_password,
+    create_access_token,
+    get_current_user,
+    get_optional_current_user
+)
 from app.services.ingestion_pipeline import (
     DocumentExtractionPipeline,
     ExtractionResult,
@@ -25,9 +36,9 @@ from app.services.core_engine import (
 
 # Initialize FastAPI application
 app = FastAPI(
-    title="Turnitin-Style Academic Plagiarism Detection API",
-    description="High-performance document ingestion and hybrid NLP originality verification engine.",
-    version="2.0.0"
+    title="Turnitin-Style Academic Plagiarism Detection & Auth API",
+    description="Full-Stack Plagiarism Detection with JWT Authentication & Scan History Auditing.",
+    version="3.0.0"
 )
 
 # Configure Cross-Origin Resource Sharing (CORS) for React frontend
@@ -40,22 +51,39 @@ app.add_middleware(
 )
 
 # ------------------------------------------------------------------------------
-# Pydantic Schemas for Strict API Contracts
+# Pydantic Schemas
 # ------------------------------------------------------------------------------
 
+class RegisterRequest(BaseModel):
+    email: EmailStr
+    password: str = Field(..., min_length=6, description="Minimum 6 characters")
+
+class LoginRequest(BaseModel):
+    email: EmailStr
+    password: str
+
+class UserResponse(BaseModel):
+    id: str
+    email: str
+
+class AuthTokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    user: UserResponse
+
 class PlagiarismMatchDetail(BaseModel):
-    id: str = Field(..., description="Unique identifier for this match occurrence")
-    matched_text: str = Field(..., description="Text chunk from uploaded document that matched a source")
-    start_index: int = Field(..., description="Character start index in the document text")
-    end_index: int = Field(..., description="Character end index in the document text")
-    similarity_score: float = Field(..., description="Confidence or similarity coefficient (0.0 - 1.0)")
-    match_type: str = Field(..., description="'exact_copy' or 'paraphrase'")
-    source_title: str = Field(..., description="Title of the matched paper, article, or web page")
-    source_url: Optional[str] = Field(None, description="External web link if matched via internet search")
-    source_id: Optional[str] = Field(None, description="Internal document identifier if matched via database")
-    source_author: Optional[str] = Field(None, description="Author or student attribution if available")
-    source_snippet: Optional[str] = Field(None, description="Exact snippet from the source for comparison")
-    source_category: str = Field(..., description="'Internet Source', 'Submitted Student Work', or 'Publications'")
+    id: str
+    matched_text: str
+    start_index: int
+    end_index: int
+    similarity_score: float
+    match_type: str
+    source_title: str
+    source_url: Optional[str] = None
+    source_id: Optional[str] = None
+    source_author: Optional[str] = None
+    source_snippet: Optional[str] = None
+    source_category: str
 
 class PlagiarismSummary(BaseModel):
     exact_matches_count: int
@@ -63,23 +91,26 @@ class PlagiarismSummary(BaseModel):
     internet_matches_count: int
 
 class CheckPlagiarismResponse(BaseModel):
+    scan_id: Optional[str] = None
     document_id: str
     document_title: str
-    overall_score: float = Field(..., description="Total plagiarism percentage (0.0 to 100.0)")
-    originality_score: float = Field(..., description="Total originality percentage (100.0 - overall_score)")
+    overall_score: float
+    originality_score: float
     total_words: int
     total_characters: int
-    full_text: str = Field(..., description="Full text for character-level highlight rendering on the frontend")
+    full_text: str
     summary: PlagiarismSummary
     matches: List[PlagiarismMatchDetail]
 
-class IngestCorpusRequest(BaseModel):
-    title: str
-    student_name: Optional[str] = "Anonymous Student"
-    text: str
+class ScanHistoryItem(BaseModel):
+    id: str
+    filename: str
+    overall_score: float
+    created_at: str
+    report: Optional[Dict[str, Any]] = None
 
 # ------------------------------------------------------------------------------
-# Singletons & Service Initialization
+# Startup Lifecycle & Singletons
 # ------------------------------------------------------------------------------
 
 ingestion_pipeline = DocumentExtractionPipeline(chunk_size=50, chunk_overlap=20, enable_ocr=True)
@@ -92,13 +123,16 @@ plagiarism_engine = PlagiarismDetectionEngine(
     matcher=nlp_matcher
 )
 
-# Pre-seed internal database with standard academic reference papers
-def _seed_sample_database():
+@app.on_event("startup")
+async def on_startup():
+    """Initializes database schema and pre-seeds reference papers."""
+    await init_db()
+    
+    # Pre-seed internal database with standard academic reference papers
     sample_text_chunks = [
         "Deep learning is a subset of machine learning, which is essentially a neural network with three or more layers. These neural networks attempt to simulate the behavior of the human brain.",
         "Attention Is All You Need introduced the Transformer architecture based solely on attention mechanisms, dispensing with recurrence and convolutions entirely.",
-        "Convolutional neural networks are commonly used for image classification, while transformers have revolutionized natural language processing.",
-        "Stochastic gradient descent with momentum optimizes convex and non-convex loss landscapes in deep neural networks."
+        "Convolutional neural networks are commonly used for image classification, while transformers have revolutionized natural language processing."
     ]
     vector_db.index_submission(
         document_id="doc_ref_cs101_sample",
@@ -107,36 +141,89 @@ def _seed_sample_database():
         chunks=sample_text_chunks
     )
 
-_seed_sample_database()
-
 # ------------------------------------------------------------------------------
-# API Endpoints
+# Authentication Routes (/register & /login)
 # ------------------------------------------------------------------------------
 
-@app.get("/api/health")
-async def health_check():
-    """Healthcheck endpoint for container orchestration and uptime monitoring."""
-    return {
-        "status": "healthy",
-        "service": "Turnitin-Style Plagiarism Detection Engine",
-        "vector_dim": vector_db.VECTOR_DIM
-    }
+@app.post("/register", response_model=AuthTokenResponse, status_code=status.HTTP_201_CREATED)
+@app.post("/api/register", response_model=AuthTokenResponse, status_code=status.HTTP_201_CREATED)
+async def register_user(payload: RegisterRequest, db: AsyncSession = Depends(get_db_session)):
+    """Registers a new user account with hashed password and returns an access token."""
+    # Check if email is already registered
+    existing_user_query = select(User).where(User.email == payload.email)
+    existing_res = await db.execute(existing_user_query)
+    if existing_res.scalar_one_or_none():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="An account with this email address already exists."
+        )
+
+    # Hash password and create record
+    hashed_pwd = hash_password(payload.password)
+    new_user = User(
+        id=str(uuid.uuid4()),
+        email=payload.email,
+        hashed_password=hashed_pwd
+    )
+    db.add(new_user)
+    await db.commit()
+    await db.refresh(new_user)
+
+    # Issue JWT token
+    token = create_access_token(data={"sub": new_user.email, "uid": new_user.id})
+
+    return AuthTokenResponse(
+        access_token=token,
+        token_type="bearer",
+        user=UserResponse(id=new_user.id, email=new_user.email)
+    )
+
+@app.post("/login", response_model=AuthTokenResponse)
+@app.post("/api/login", response_model=AuthTokenResponse)
+async def login_user(payload: LoginRequest, db: AsyncSession = Depends(get_db_session)):
+    """Authenticates credentials and returns a signed JWT access token."""
+    user_query = select(User).where(User.email == payload.email)
+    res = await db.execute(user_query)
+    user = res.scalar_one_or_none()
+
+    if not user or not verify_password(payload.password, user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect email or password.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    token = create_access_token(data={"sub": user.email, "uid": user.id})
+
+    return AuthTokenResponse(
+        access_token=token,
+        token_type="bearer",
+        user=UserResponse(id=user.id, email=user.email)
+    )
+
+@app.get("/api/me", response_model=UserResponse)
+async def get_my_profile(current_user: User = Depends(get_current_user)):
+    """Returns the authenticated user's profile."""
+    return UserResponse(id=current_user.id, email=current_user.email)
+
+# ------------------------------------------------------------------------------
+# Protected Plagiarism Check Endpoint & Scan History Persistence
+# ------------------------------------------------------------------------------
 
 @app.post("/api/check-plagiarism", response_model=CheckPlagiarismResponse)
-async def check_plagiarism(
+async def check_plagiarism_protected(
     file: UploadFile = File(..., description="Uploaded document (PDF, DOCX, or TXT)"),
-    enable_web_search: bool = Form(True, description="Enable live internet cross-referencing via search APIs")
+    enable_web_search: bool = Form(True, description="Enable live internet cross-referencing"),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session)
 ):
     """
-    Main Plagiarism Verification Pipeline:
-      1. Receives uploaded PDF, DOCX, or TXT file
-      2. Extracts digital text or triggers OCR fallback on scanned documents
-      3. Normalizes Unicode and removes noisy headers/footers
-      4. Segments text into sequential overlapping chunks with start/end character offsets
-      5. Runs Qdrant vector similarity search against past student papers
-      6. Runs live internet search queries (SerpAPI / Bing Web Search)
-      7. Evaluates matches using N-gram Jaccard (exact) and Cosine Similarity (paraphrase)
-      8. Returns overall score and character index spans for frontend highlighter rendering
+    Authenticated Document Scanning Endpoint:
+      1. Verifies caller JWT token
+      2. Ingests and normalizes document
+      3. Compares against internal vector DB & live web search
+      4. Saves scan report into ScanHistory table linked to current_user.id
+      5. Returns overall_score, originality_score, and character index spans
     """
     filename = file.filename or "Uploaded_Document.txt"
     file_ext = os.path.splitext(filename)[1].lower()
@@ -147,13 +234,13 @@ async def check_plagiarism(
             detail=f"Unsupported format '{file_ext}'. Supported formats: PDF, DOCX, and TXT."
         )
 
-    # 1. Save uploaded file to temporary path for parser processing
+    # 1. Save uploaded file to temporary path
     with tempfile.NamedTemporaryFile(suffix=file_ext, delete=False) as temp_file:
         temp_path = temp_file.name
         shutil.copyfileobj(file.file, temp_file)
 
     try:
-        # 2. Extract, clean, and chunk document using the Ingestion Pipeline
+        # 2. Extract and chunk text
         extraction_result: ExtractionResult = ingestion_pipeline.ingest_document(temp_path)
     except UnsupportedFormatError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
@@ -162,11 +249,9 @@ async def check_plagiarism(
     except IngestionPipelineError as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
     finally:
-        # Cleanup temporary file
         if os.path.exists(temp_path):
             os.remove(temp_path)
 
-    # 3. Extract text chunk strings for NLP Vectorization
     chunks = extraction_result.chunks
     chunk_strings = [c.text for c in chunks]
 
@@ -176,7 +261,7 @@ async def check_plagiarism(
             detail="Document text is too brief to generate meaningful NLP chunks for scanning."
         )
 
-    # 4. Execute Core Detection Engine (Vector DB + Web Search + NLP Matching)
+    # 3. Execute Core Detection Engine
     doc_id = str(uuid.uuid4())
     scan_report = await plagiarism_engine.scan_document_chunks(
         document_id=doc_id,
@@ -185,7 +270,7 @@ async def check_plagiarism(
         enable_web_search=enable_web_search
     )
 
-    # 5. Format Matches with exact start_index and end_index offsets
+    # 4. Format matches with exact character start_index and end_index
     formatted_matches: List[PlagiarismMatchDetail] = []
     for idx, match_item in enumerate(scan_report.get("matches", [])):
         chunk_idx = match_item["chunk_index"]
@@ -206,8 +291,8 @@ async def check_plagiarism(
             source_category=match_item.get("source_category", "Internet Source")
         ))
 
-    # 6. Build and return structured response
-    return CheckPlagiarismResponse(
+    response_payload = CheckPlagiarismResponse(
+        scan_id=None,
         document_id=doc_id,
         document_title=filename,
         overall_score=scan_report["overall_plagiarism_percentage"],
@@ -223,96 +308,79 @@ async def check_plagiarism(
         matches=formatted_matches
     )
 
-@app.post("/api/scan")
-async def scan_alias(
-    file: Optional[UploadFile] = File(None),
-    raw_text_input: Optional[str] = Form(None),
-    enable_web_search: bool = Form(True)
+    # 5. Save report to ScanHistory table linked to current_user
+    scan_record = ScanHistory(
+        id=str(uuid.uuid4()),
+        user_id=current_user.id,
+        filename=filename,
+        overall_score=scan_report["overall_plagiarism_percentage"],
+        report_json=response_payload.dict()
+    )
+    db.add(scan_record)
+    await db.commit()
+    await db.refresh(scan_record)
+
+    response_payload.scan_id = scan_record.id
+    return response_payload
+
+# ------------------------------------------------------------------------------
+# Scan History Endpoints (GET /api/history)
+# ------------------------------------------------------------------------------
+
+@app.get("/api/history", response_model=List[ScanHistoryItem])
+async def get_user_scan_history(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session)
 ):
-    """Backwards-compatibility alias for the scan endpoint."""
-    if file:
-        return await check_plagiarism(file=file, enable_web_search=enable_web_search)
-    elif raw_text_input:
-        # Wrap raw text into a temporary file
-        with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False, encoding="utf-8") as f:
-            f.write(raw_text_input)
-            tpath = f.name
-        try:
-            extraction_result = ingestion_pipeline.ingest_document(tpath)
-            chunk_strings = [c.text for c in extraction_result.chunks]
-            doc_id = str(uuid.uuid4())
-            scan_report = await plagiarism_engine.scan_document_chunks(
-                document_id=doc_id,
-                document_title="Pasted Text Submission",
-                chunks=chunk_strings,
-                enable_web_search=enable_web_search
-            )
-            formatted_matches = []
-            for idx, m in enumerate(scan_report.get("matches", [])):
-                c = extraction_result.chunks[m["chunk_index"]]
-                formatted_matches.append(PlagiarismMatchDetail(
-                    id=f"match_{idx}_{uuid.uuid4().hex[:6]}",
-                    matched_text=c.text,
-                    start_index=c.start_char,
-                    end_index=c.end_char,
-                    similarity_score=m["confidence_score"],
-                    match_type=m["match_type"],
-                    source_title=m["source_title"],
-                    source_url=m.get("source_url"),
-                    source_id=m.get("source_id"),
-                    source_author=m.get("source_author"),
-                    source_snippet=m.get("source_snippet"),
-                    source_category=m.get("source_category", "Internet Source")
-                ))
-            return CheckPlagiarismResponse(
-                document_id=doc_id,
-                document_title="Pasted Text Submission",
-                overall_score=scan_report["overall_plagiarism_percentage"],
-                originality_score=scan_report["originality_percentage"],
-                total_words=extraction_result.metadata.total_words,
-                total_characters=extraction_result.metadata.total_characters_cleaned,
-                full_text=extraction_result.cleaned_text,
-                summary=PlagiarismSummary(
-                    exact_matches_count=scan_report["summary"]["exact_matches_count"],
-                    paraphrase_matches_count=scan_report["summary"]["paraphrase_matches_count"],
-                    internet_matches_count=scan_report["summary"]["internet_matches_count"]
-                ),
-                matches=formatted_matches
-            )
-        finally:
-            if os.path.exists(tpath):
-                os.remove(tpath)
-    else:
-        raise HTTPException(status_code=400, detail="Please upload a file or provide text.")
+    """Retrieves all past plagiarism scan audits for the authenticated user."""
+    query = (
+        select(ScanHistory)
+        .where(ScanHistory.user_id == current_user.id)
+        .order_by(ScanHistory.created_at.desc())
+    )
+    res = await db.execute(query)
+    scans = res.scalars().all()
 
-@app.post("/api/ingest-corpus")
-async def ingest_corpus_document(payload: IngestCorpusRequest):
-    """Seeds reference papers or past student submissions into the internal vector database."""
-    if not payload.text or len(payload.text.strip()) < 30:
-        raise HTTPException(status_code=400, detail="Text too short to index into corpus.")
+    items = []
+    for s in scans:
+        items.append(ScanHistoryItem(
+            id=s.id,
+            filename=s.filename,
+            overall_score=round(s.overall_score, 2),
+            created_at=s.created_at.isoformat() if s.created_at else "",
+            report=s.report_json
+        ))
+    return items
 
-    with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False, encoding="utf-8") as f:
-        f.write(payload.text)
-        tpath = f.name
-    try:
-        extraction_result = ingestion_pipeline.ingest_document(tpath)
-        chunks = [c.text for c in extraction_result.chunks]
-        doc_id = str(uuid.uuid4())
-        indexed_count = vector_db.index_submission(
-            document_id=doc_id,
-            student_name=payload.student_name or "Anonymous Student",
-            title=payload.title,
-            chunks=chunks
+@app.get("/api/history/{scan_id}", response_model=CheckPlagiarismResponse)
+async def get_single_scan_report(
+    scan_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session)
+):
+    """Fetches the full originality report for a past scan by ID."""
+    query = select(ScanHistory).where(
+        ScanHistory.id == scan_id,
+        ScanHistory.user_id == current_user.id
+    )
+    res = await db.execute(query)
+    scan = res.scalar_one_or_none()
+
+    if not scan:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Scan report not found or does not belong to your account."
         )
-        return {
-            "document_id": doc_id,
-            "title": payload.title,
-            "chunks_indexed": indexed_count,
-            "status": "Successfully indexed in Qdrant Vector DB"
-        }
-    finally:
-        if os.path.exists(tpath):
-            os.remove(tpath)
+
+    return CheckPlagiarismResponse(**scan.report_json)
+
+@app.get("/api/health")
+async def health_check():
+    return {
+        "status": "healthy",
+        "service": "Turnitin-Style Plagiarism Detection & Auth Engine",
+        "vector_dim": vector_db.VECTOR_DIM
+    }
 
 # Static files mount for production frontend bundle
 static_dist_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../frontend/dist"))

@@ -1,5 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import { useDropzone } from 'react-dropzone';
+import { useAuth } from '../context/AuthContext';
 import { 
   Upload, 
   FileText, 
@@ -29,6 +30,7 @@ The Python programming language was conceived by Guido van Rossum in the late 19
 In our 14-epoch experimental study using 4-bit quantized Low-Rank Adaptation (LoRA), we achieved a 68% reduction in GPU VRAM consumption while preserving validation perplexity within 0.04 of the full-precision baseline.`;
 
 export default function UploadComponent({ onScanComplete, isLoading, setIsLoading }) {
+  const { authFetch } = useAuth();
   const [file, setFile] = useState(null);
   const [enableWeb, setEnableWeb] = useState(true);
   const [errorMessage, setErrorMessage] = useState('');
@@ -92,11 +94,7 @@ export default function UploadComponent({ onScanComplete, isLoading, setIsLoadin
       formData.append('file', file);
       formData.append('enable_web_search', enableWeb ? 'true' : 'false');
 
-      const apiEndpoint = import.meta.env.VITE_API_URL 
-        ? `${import.meta.env.VITE_API_URL.replace(/\/+$/, '')}/api/check-plagiarism`
-        : '/api/check-plagiarism';
-
-      const response = await fetch(apiEndpoint, {
+      const response = await authFetch('/api/check-plagiarism', {
         method: 'POST',
         body: formData,
       });
