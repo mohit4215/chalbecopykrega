@@ -90,7 +90,38 @@ services:
       start_period: 30s
 
   # ----------------------------------------------------------------------------
-  # 3. React Frontend & Nginx API Gateway Reverse Proxy
+  # 4. Celery Distributed Task Worker (Async Document Ingestion & Plagiarism Analysis)
+  # ----------------------------------------------------------------------------
+  celery_worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: plagiarism_celery_worker
+    command: celery -A app.tasks.celery_worker.celery_app worker --loglevel=info --concurrency=2
+    restart: always
+    depends_on:
+      redis:
+        condition: service_healthy
+      vector-db:
+        condition: service_healthy
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - QDRANT_URL=http://vector-db:6333
+      - QDRANT_COLLECTION_NAME=student_submissions
+      - SERPAPI_API_KEY=${SERPAPI_API_KEY:-}
+      - BING_SEARCH_API_KEY=${BING_SEARCH_API_KEY:-}
+      - EMBEDDING_MODEL_NAME=sentence-transformers/all-MiniLM-L6-v2
+      - HF_HOME=/app/cache/huggingface
+      - ENABLE_OCR=true
+    volumes:
+      - model_cache:/app/cache/huggingface
+    networks:
+      - plagiarism_network
+
+  # ----------------------------------------------------------------------------
+  # 5. React Frontend & Nginx API Gateway Reverse Proxy
   # ----------------------------------------------------------------------------
   frontend:
     build:

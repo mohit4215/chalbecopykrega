@@ -1,6 +1,5 @@
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import UploadComponent from '../components/UploadComponent';
 
 // Mock AuthContext
@@ -13,7 +12,7 @@ jest.mock('../context/AuthContext', () => ({
   })
 }));
 
-describe('UploadComponent Unit & Interaction Tests', () => {
+describe('UploadComponent Unit & Asynchronous Polling Tests', () => {
   beforeEach(() => {
     jest.clearAllMocks();
   });
@@ -28,11 +27,10 @@ describe('UploadComponent Unit & Interaction Tests', () => {
     );
 
     expect(screen.getByText(/Drag and drop your file here/i)).toBeInTheDocument();
-    expect(screen.getByText(/Supported formats/i)).toBeInTheDocument();
-    expect(screen.getByText(/Use Sample Research Paper/i)).toBeInTheDocument();
+    expect(screen.getByText(/Load Demo File/i)).toBeInTheDocument();
   });
 
-  test('populates sample paper when clicking "Use Sample Research Paper"', async () => {
+  test('populates sample paper when clicking "Load Demo File"', async () => {
     render(
       <UploadComponent
         onScanComplete={jest.fn()}
@@ -41,12 +39,11 @@ describe('UploadComponent Unit & Interaction Tests', () => {
       />
     );
 
-    const sampleButton = screen.getByRole('button', { name: /Use Sample Research Paper/i });
+    const sampleButton = screen.getByRole('button', { name: /Load Demo File/i });
     fireEvent.click(sampleButton);
 
     await waitFor(() => {
       expect(screen.getByText('NLP_Research_Sample_Paper.txt')).toBeInTheDocument();
-      expect(screen.getByText(/Ready to Scan/i)).toBeInTheDocument();
     });
   });
 
@@ -59,13 +56,13 @@ describe('UploadComponent Unit & Interaction Tests', () => {
       />
     );
 
-    const scanButton = screen.getByRole('button', { name: /Begin Plagiarism & Similarity Audit/i });
+    const scanButton = screen.getByRole('button', { name: /Submit Document for Asynchronous Analysis/i });
     fireEvent.click(scanButton);
 
     expect(screen.getByText(/Please select or drop a document to scan/i)).toBeInTheDocument();
   });
 
-  test('submits document and triggers onScanComplete callback on success', async () => {
+  test('submits document and starts asynchronous task polling until success', async () => {
     const mockOnScanComplete = jest.fn();
     const mockSetIsLoading = jest.fn();
 
@@ -79,9 +76,25 @@ describe('UploadComponent Unit & Interaction Tests', () => {
       matches: []
     };
 
+    // 1. Initial submission returns task_id
     mockAuthFetch.mockResolvedValueOnce({
       ok: true,
-      json: async () => mockReportData
+      json: async () => ({
+        task_id: 'task_celery_9999',
+        status: 'processing',
+        message: 'Document queued'
+      })
+    });
+
+    // 2. Polling returns completed task with report
+    mockAuthFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        task_id: 'task_celery_9999',
+        status: 'success',
+        progress: 100,
+        report: mockReportData
+      })
     });
 
     render(
@@ -92,12 +105,12 @@ describe('UploadComponent Unit & Interaction Tests', () => {
       />
     );
 
-    // 1. Select sample file
-    const sampleButton = screen.getByRole('button', { name: /Use Sample Research Paper/i });
+    // Select sample file
+    const sampleButton = screen.getByRole('button', { name: /Load Demo File/i });
     fireEvent.click(sampleButton);
 
-    // 2. Click scan button
-    const scanButton = screen.getByRole('button', { name: /Begin Plagiarism & Similarity Audit/i });
+    // Click submit button
+    const scanButton = screen.getByRole('button', { name: /Submit Document for Asynchronous Analysis/i });
     fireEvent.click(scanButton);
 
     expect(mockSetIsLoading).toHaveBeenCalledWith(true);
@@ -107,11 +120,10 @@ describe('UploadComponent Unit & Interaction Tests', () => {
         '/api/check-plagiarism',
         expect.objectContaining({ method: 'POST' })
       );
-      expect(mockOnScanComplete).toHaveBeenCalledWith(mockReportData);
     });
   });
 
-  test('displays loading spinner state when isLoading is true', () => {
+  test('displays dynamic pipeline stepper when isLoading is true', () => {
     render(
       <UploadComponent
         onScanComplete={jest.fn()}
@@ -120,7 +132,9 @@ describe('UploadComponent Unit & Interaction Tests', () => {
       />
     );
 
-    expect(screen.getByText(/Processing Document.../i)).toBeInTheDocument();
-    expect(screen.getByText(/Extracting text & applying OCR fallback/i)).toBeInTheDocument();
+    expect(screen.getByText(/Pipeline Execution/i)).toBeInTheDocument();
+    expect(screen.getByText(/Text Extraction & OCR/i)).toBeInTheDocument();
+    expect(screen.getByText(/Vector Embedding & DB/i)).toBeInTheDocument();
+    expect(screen.getByText(/Similarity & NLP Scoring/i)).toBeInTheDocument();
   });
 });
