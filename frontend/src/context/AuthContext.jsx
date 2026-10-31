@@ -81,8 +81,44 @@ export function AuthProvider({ children }) {
     return fetch(fullUrl, { ...options, headers });
   };
 
+  const refreshUser = async () => {
+    if (!token) return;
+    try {
+      const res = await authFetch('/api/me');
+      if (res.ok) {
+        const freshUser = await res.json();
+        setUser(freshUser);
+        return freshUser;
+      }
+    } catch {
+      // Ignore network errors
+    }
+  };
+
+  const updateUserCredits = (credits, tier) => {
+    setUser(prev => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        scan_credits: credits !== undefined ? credits : prev.scan_credits,
+        subscription_tier: tier !== undefined ? tier : prev.subscription_tier,
+        has_active_subscription: tier === 'pro'
+      };
+    });
+  };
+
   return (
-    <AuthContext.Provider value={{ token, user, login, register, logout, authFetch, isAuthenticated: !!token }}>
+    <AuthContext.Provider value={{ 
+      token, 
+      user, 
+      login, 
+      register, 
+      logout, 
+      authFetch, 
+      refreshUser, 
+      updateUserCredits, 
+      isAuthenticated: !!token 
+    }}>
       {!loading && children}
     </AuthContext.Provider>
   );
