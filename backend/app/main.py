@@ -3,7 +3,7 @@ import uuid
 import tempfile
 import shutil
 from typing import Optional, List, Dict, Any
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Depends, status
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Depends, Request, Header, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import select
@@ -16,9 +16,9 @@ from app.services.auth import (
     hash_password,
     verify_password,
     create_access_token,
-    get_current_user,
-    get_optional_current_user
+    get_current_user
 )
+from app.services.stripe_service import StripeService, PLANS
 from app.services.ingestion_pipeline import (
     DocumentExtractionPipeline,
     ExtractionResult,
@@ -36,12 +36,12 @@ from app.services.core_engine import (
 
 # Initialize FastAPI application
 app = FastAPI(
-    title="Turnitin-Style Academic Plagiarism Detection & Auth API",
-    description="Full-Stack Plagiarism Detection with JWT Authentication & Scan History Auditing.",
-    version="3.0.0"
+    title="Turnitin-Style Plagiarism Detection & SaaS Monetization API",
+    description="Originality checking with Stripe Subscriptions, Credits, and Webhook fulfillment.",
+    version="4.0.0"
 )
 
-# Configure Cross-Origin Resource Sharing (CORS) for React frontend
+# Configure CORS for React frontend
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -65,11 +65,27 @@ class LoginRequest(BaseModel):
 class UserResponse(BaseModel):
     id: str
     email: str
+    subscription_tier: str
+    subscription_status: str
+    scan_credits: int
+    has_active_subscription: bool
 
 class AuthTokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     user: UserResponse
+
+class CheckoutSessionRequest(BaseModel):
+    plan_id: str = Field("pro_monthly", description="'pro_monthly', 'credits_25', or 'credits_100'")
+    success_url: Optional[str] = None
+    cancel_url: Optional[str] = None
+
+class CheckoutSessionResponse(BaseModel):
+    checkout_url: str
+    session_id: str
+
+class CustomerPortalRequest(BaseModel):
+    return_url: Optional[str] = None
 
 class PlagiarismMatchDetail(BaseModel):
     id: str
@@ -98,6 +114,8 @@ class CheckPlagiarismResponse(BaseModel):
     originality_score: float
     total_words: int
     total_characters: int
+    remaining_credits: int
+    subscription_tier: str
     full_text: str
     summary: PlagiarismSummary
     matches: List[PlagiarismMatchDetail]
@@ -110,7 +128,7 @@ class ScanHistoryItem(BaseModel):
     report: Optional[Dict[str, Any]] = None
 
 # ------------------------------------------------------------------------------
-# Startup Lifecycle & Singletons
+# Singletons & Startup Lifecycle
 # ------------------------------------------------------------------------------
 
 ingestion_pipeline = DocumentExtractionPipeline(chunk_size=50, chunk_overlap=20, enable_ocr=True)
@@ -125,10 +143,8 @@ plagiarism_engine = PlagiarismDetectionEngine(
 
 @app.on_event("startup")
 async def on_startup():
-    """Initializes database schema and pre-seeds reference papers."""
     await init_db()
-    
-    # Pre-seed internal database with standard academic reference papers
+    # Pre-seed internal database with reference papers
     sample_text_chunks = [
         "Deep learning is a subset of machine learning, which is essentially a neural network with three or more layers. These neural networks attempt to simulate the behavior of the human brain.",
         "Attention Is All You Need introduced the Transformer architecture based solely on attention mechanisms, dispensing with recurrence and convolutions entirely.",
@@ -142,89 +158,155 @@ async def on_startup():
     )
 
 # ------------------------------------------------------------------------------
-# Authentication Routes (/register & /login)
+# Authentication Routes
 # ------------------------------------------------------------------------------
 
-@app.post("/register", response_model=AuthTokenResponse, status_code=status.HTTP_201_CREATED)
 @app.post("/api/register", response_model=AuthTokenResponse, status_code=status.HTTP_201_CREATED)
 async def register_user(payload: RegisterRequest, db: AsyncSession = Depends(get_db_session)):
-    """Registers a new user account with hashed password and returns an access token."""
-    # Check if email is already registered
-    existing_user_query = select(User).where(User.email == payload.email)
-    existing_res = await db.execute(existing_user_query)
-    if existing_res.scalar_one_or_none():
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="An account with this email address already exists."
-        )
+    existing = await db.execute(select(User).where(User.email == payload.email))
+    if existing.scalar_one_or_none():
+        raise HTTPException(status_code=400, detail="An account with this email address already exists.")
 
-    # Hash password and create record
-    hashed_pwd = hash_password(payload.password)
     new_user = User(
         id=str(uuid.uuid4()),
         email=payload.email,
-        hashed_password=hashed_pwd
+        hashed_password=hash_password(payload.password),
+        scan_credits=3,  # Complimentary initial scan credits
+        subscription_tier="free",
+        subscription_status="inactive"
     )
     db.add(new_user)
     await db.commit()
     await db.refresh(new_user)
 
-    # Issue JWT token
     token = create_access_token(data={"sub": new_user.email, "uid": new_user.id})
-
     return AuthTokenResponse(
         access_token=token,
         token_type="bearer",
-        user=UserResponse(id=new_user.id, email=new_user.email)
+        user=UserResponse(**new_user.to_dict())
     )
 
-@app.post("/login", response_model=AuthTokenResponse)
 @app.post("/api/login", response_model=AuthTokenResponse)
 async def login_user(payload: LoginRequest, db: AsyncSession = Depends(get_db_session)):
-    """Authenticates credentials and returns a signed JWT access token."""
-    user_query = select(User).where(User.email == payload.email)
-    res = await db.execute(user_query)
+    res = await db.execute(select(User).where(User.email == payload.email))
     user = res.scalar_one_or_none()
 
     if not user or not verify_password(payload.password, user.hashed_password):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect email or password.",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+        raise HTTPException(status_code=401, detail="Incorrect email or password.")
 
     token = create_access_token(data={"sub": user.email, "uid": user.id})
-
     return AuthTokenResponse(
         access_token=token,
         token_type="bearer",
-        user=UserResponse(id=user.id, email=user.email)
+        user=UserResponse(**user.to_dict())
     )
 
 @app.get("/api/me", response_model=UserResponse)
 async def get_my_profile(current_user: User = Depends(get_current_user)):
-    """Returns the authenticated user's profile."""
-    return UserResponse(id=current_user.id, email=current_user.email)
+    return UserResponse(**current_user.to_dict())
 
 # ------------------------------------------------------------------------------
-# Protected Plagiarism Check Endpoint & Scan History Persistence
+# Stripe SaaS Monetization Endpoints
+# ------------------------------------------------------------------------------
+
+@app.get("/api/billing/plans")
+async def get_available_plans():
+    """Returns available pricing plans and credit top-up packages."""
+    return PLANS
+
+@app.post("/api/create-checkout-session", response_model=CheckoutSessionResponse)
+async def create_checkout_session(
+    payload: CheckoutSessionRequest,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session)
+):
+    """
+    Creates a Stripe Checkout Session for Pro monthly subscription or one-time scan credit packs.
+    """
+    origin = request.headers.get("origin") or "http://localhost:3000"
+    success_url = payload.success_url or f"{origin}/billing"
+    cancel_url = payload.cancel_url or f"{origin}/pricing"
+
+    try:
+        session_data = await StripeService.create_checkout_session(
+            user=current_user,
+            plan_id=payload.plan_id,
+            success_url=success_url,
+            cancel_url=cancel_url,
+            db=db
+        )
+        return CheckoutSessionResponse(**session_data)
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+@app.post("/api/create-portal-session")
+async def create_customer_portal_session(
+    payload: CustomerPortalRequest,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session)
+):
+    """Generates a secure Stripe Billing Customer Portal URL for subscription management."""
+    origin = request.headers.get("origin") or "http://localhost:3000"
+    return_url = payload.return_url or f"{origin}/billing"
+
+    portal_url = await StripeService.create_portal_session(
+        user=current_user,
+        return_url=return_url,
+        db=db
+    )
+    return {"portal_url": portal_url}
+
+@app.post("/api/webhook")
+async def stripe_webhook(
+    request: Request,
+    stripe_signature: str = Header(None, alias="stripe-signature"),
+    db: AsyncSession = Depends(get_db_session)
+):
+    """
+    Secure Webhook endpoint listening for Stripe events:
+      - checkout.session.completed (Activates subscription or adds credits)
+      - invoice.payment_succeeded (Subscription renewal)
+      - customer.subscription.deleted (Cancellation)
+    """
+    payload_bytes = await request.body()
+    try:
+        result = await StripeService.handle_webhook_event(
+            payload_bytes=payload_bytes,
+            sig_header=stripe_signature or "",
+            db=db
+        )
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+# ------------------------------------------------------------------------------
+# Protected Plagiarism Check Endpoint with Usage & Credit Enforcement
 # ------------------------------------------------------------------------------
 
 @app.post("/api/check-plagiarism", response_model=CheckPlagiarismResponse)
-async def check_plagiarism_protected(
+async def check_plagiarism_monetized(
     file: UploadFile = File(..., description="Uploaded document (PDF, DOCX, or TXT)"),
     enable_web_search: bool = Form(True, description="Enable live internet cross-referencing"),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session)
 ):
     """
-    Authenticated Document Scanning Endpoint:
-      1. Verifies caller JWT token
-      2. Ingests and normalizes document
-      3. Compares against internal vector DB & live web search
-      4. Saves scan report into ScanHistory table linked to current_user.id
-      5. Returns overall_score, originality_score, and character index spans
+    Monetized Plagiarism Scanning Endpoint:
+      1. Verifies that user has an active Pro subscription OR > 0 scan credits
+      2. Ingests and processes the document
+      3. Deducts 1 scan credit upon success (or allows unlimited for Pro subscribers)
+      4. Persists the report to ScanHistory
+      5. Returns full results with remaining credit balance
     """
+    # Usage Enforcement Check
+    if not current_user.can_scan:
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail="Insufficient scan credits. Please upgrade to Pro for unlimited scans or purchase additional credit packs."
+        )
+
     filename = file.filename or "Uploaded_Document.txt"
     file_ext = os.path.splitext(filename)[1].lower()
 
@@ -240,7 +322,6 @@ async def check_plagiarism_protected(
         shutil.copyfileobj(file.file, temp_file)
 
     try:
-        # 2. Extract and chunk text
         extraction_result: ExtractionResult = ingestion_pipeline.ingest_document(temp_path)
     except UnsupportedFormatError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
@@ -261,7 +342,7 @@ async def check_plagiarism_protected(
             detail="Document text is too brief to generate meaningful NLP chunks for scanning."
         )
 
-    # 3. Execute Core Detection Engine
+    # 2. Run Core Detection Engine
     doc_id = str(uuid.uuid4())
     scan_report = await plagiarism_engine.scan_document_chunks(
         document_id=doc_id,
@@ -270,7 +351,14 @@ async def check_plagiarism_protected(
         enable_web_search=enable_web_search
     )
 
-    # 4. Format matches with exact character start_index and end_index
+    # 3. Usage Deduction (Deduct 1 credit for non-Pro users)
+    if not current_user.has_active_subscription:
+        current_user.scan_credits = max(0, current_user.scan_credits - 1)
+        db.add(current_user)
+        await db.commit()
+        await db.refresh(current_user)
+
+    # 4. Format Matches
     formatted_matches: List[PlagiarismMatchDetail] = []
     for idx, match_item in enumerate(scan_report.get("matches", [])):
         chunk_idx = match_item["chunk_index"]
@@ -299,6 +387,8 @@ async def check_plagiarism_protected(
         originality_score=scan_report["originality_percentage"],
         total_words=extraction_result.metadata.total_words,
         total_characters=extraction_result.metadata.total_characters_cleaned,
+        remaining_credits=current_user.scan_credits,
+        subscription_tier=current_user.subscription_tier,
         full_text=extraction_result.cleaned_text,
         summary=PlagiarismSummary(
             exact_matches_count=scan_report["summary"]["exact_matches_count"],
@@ -308,7 +398,7 @@ async def check_plagiarism_protected(
         matches=formatted_matches
     )
 
-    # 5. Save report to ScanHistory table linked to current_user
+    # 5. Persist to ScanHistory
     scan_record = ScanHistory(
         id=str(uuid.uuid4()),
         user_id=current_user.id,
@@ -318,13 +408,12 @@ async def check_plagiarism_protected(
     )
     db.add(scan_record)
     await db.commit()
-    await db.refresh(scan_record)
 
     response_payload.scan_id = scan_record.id
     return response_payload
 
 # ------------------------------------------------------------------------------
-# Scan History Endpoints (GET /api/history)
+# History Endpoints
 # ------------------------------------------------------------------------------
 
 @app.get("/api/history", response_model=List[ScanHistoryItem])
@@ -332,57 +421,28 @@ async def get_user_scan_history(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session)
 ):
-    """Retrieves all past plagiarism scan audits for the authenticated user."""
-    query = (
-        select(ScanHistory)
-        .where(ScanHistory.user_id == current_user.id)
-        .order_by(ScanHistory.created_at.desc())
-    )
+    query = select(ScanHistory).where(ScanHistory.user_id == current_user.id).order_by(ScanHistory.created_at.desc())
     res = await db.execute(query)
     scans = res.scalars().all()
-
-    items = []
-    for s in scans:
-        items.append(ScanHistoryItem(
+    return [
+        ScanHistoryItem(
             id=s.id,
             filename=s.filename,
             overall_score=round(s.overall_score, 2),
-            created_at=s.created_at.isoformat() if s.created_at else "",
+            created_at=s.created_at.isoformat(),
             report=s.report_json
-        ))
-    return items
-
-@app.get("/api/history/{scan_id}", response_model=CheckPlagiarismResponse)
-async def get_single_scan_report(
-    scan_id: str,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db_session)
-):
-    """Fetches the full originality report for a past scan by ID."""
-    query = select(ScanHistory).where(
-        ScanHistory.id == scan_id,
-        ScanHistory.user_id == current_user.id
-    )
-    res = await db.execute(query)
-    scan = res.scalar_one_or_none()
-
-    if not scan:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Scan report not found or does not belong to your account."
-        )
-
-    return CheckPlagiarismResponse(**scan.report_json)
+        ) for s in scans
+    ]
 
 @app.get("/api/health")
 async def health_check():
     return {
         "status": "healthy",
-        "service": "Turnitin-Style Plagiarism Detection & Auth Engine",
-        "vector_dim": vector_db.VECTOR_DIM
+        "service": "Turnitin Plagiarism & Stripe Monetization API",
+        "stripe_configured": bool(os.getenv("STRIPE_SECRET_KEY"))
     }
 
-# Static files mount for production frontend bundle
+# Static files mount
 static_dist_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../frontend/dist"))
 if os.path.isdir(static_dist_path):
     from fastapi.staticfiles import StaticFiles

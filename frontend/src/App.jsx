@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { 
   ShieldCheck, 
@@ -6,10 +6,10 @@ import {
   Printer, 
   History, 
   UploadCloud, 
-  User, 
+  CreditCard, 
+  Sparkles,
+  Zap,
   LogOut, 
-  LogIn, 
-  FileCheck2,
   X
 } from 'lucide-react';
 
@@ -19,20 +19,31 @@ import DocumentViewer from './components/DocumentViewer';
 import SourcesSidebar from './components/SourcesSidebar';
 import DiffModal from './components/DiffModal';
 import HistoryDashboard from './components/HistoryDashboard';
+import PricingPage from './components/PricingPage';
+import BillingDashboard from './components/BillingDashboard';
 import LoginForm from './components/LoginForm';
 import RegisterForm from './components/RegisterForm';
 
 function MainApp() {
-  const { user, isAuthenticated, logout } = useAuth();
-  const [activeTab, setActiveTab] = useState('scan'); // 'scan' | 'history' | 'report'
+  const { user, isAuthenticated, logout, updateUserCredits, refreshUser } = useAuth();
+  const [activeTab, setActiveTab] = useState('scan'); // 'scan' | 'history' | 'report' | 'pricing' | 'billing'
   const [report, setReport] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [selectedMatch, setSelectedMatch] = useState(null);
   const [isDiffOpen, setIsDiffOpen] = useState(false);
   const [authModal, setAuthModal] = useState(null); // null | 'login' | 'register'
 
+  useEffect(() => {
+    if (isAuthenticated) {
+      refreshUser();
+    }
+  }, [isAuthenticated]);
+
   const handleScanComplete = (reportData) => {
     setReport(reportData);
+    if (reportData.remaining_credits !== undefined) {
+      updateUserCredits(reportData.remaining_credits, reportData.subscription_tier);
+    }
     setActiveTab('report');
   };
 
@@ -50,6 +61,8 @@ function MainApp() {
     window.print();
   };
 
+  const isPro = user?.has_active_subscription || user?.subscription_tier === 'pro';
+
   return (
     <div className="min-h-screen bg-slate-100/60 flex flex-col font-sans antialiased text-slate-900">
       {/* Top Application Navbar */}
@@ -65,19 +78,19 @@ function MainApp() {
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="text-base font-extrabold text-slate-900 leading-none">Turnitin OriginalityGuard</h1>
+                <h1 className="text-base font-extrabold text-slate-900 leading-none">OriginalityGuard</h1>
                 <span className="px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider bg-indigo-50 text-indigo-700 border border-indigo-200">
-                  JWT Auth & History
+                  Stripe SaaS
                 </span>
               </div>
               <p className="text-[11px] text-slate-500 mt-0.5">
-                FastAPI • Qdrant Vector DB • Scanned OCR • Audit Logging
+                FastAPI • Qdrant • Hybrid NLP • Subscription Monetization
               </p>
             </div>
           </div>
 
           {/* Navigation Controls */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
             {isAuthenticated ? (
               <>
                 <button
@@ -90,7 +103,7 @@ function MainApp() {
                   }`}
                 >
                   <UploadCloud className="w-3.5 h-3.5" />
-                  <span>New Scan</span>
+                  <span className="hidden sm:inline">New Scan</span>
                 </button>
 
                 <button
@@ -103,26 +116,58 @@ function MainApp() {
                   }`}
                 >
                   <History className="w-3.5 h-3.5" />
-                  <span>Scan History</span>
+                  <span className="hidden sm:inline">History</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('pricing')}
+                  className={`px-3 py-1.5 text-xs font-bold rounded-xl flex items-center gap-1.5 transition ${
+                    activeTab === 'pricing'
+                      ? 'bg-indigo-600 text-white shadow-sm'
+                      : 'text-slate-600 hover:bg-slate-100'
+                  }`}
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                  <span>Pricing</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('billing')}
+                  className={`px-3 py-1.5 text-xs font-bold rounded-xl flex items-center gap-1.5 transition ${
+                    activeTab === 'billing'
+                      ? 'bg-indigo-600 text-white shadow-sm'
+                      : 'text-slate-600 hover:bg-slate-100'
+                  }`}
+                >
+                  <CreditCard className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Billing</span>
                 </button>
 
                 {report && activeTab === 'report' && (
                   <button
                     type="button"
                     onClick={handlePrint}
-                    className="hidden sm:flex px-3 py-1.5 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl items-center gap-1.5 transition"
+                    className="hidden md:flex px-3 py-1.5 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl items-center gap-1.5 transition"
                   >
                     <Printer className="w-3.5 h-3.5" />
                     <span>Print</span>
                   </button>
                 )}
 
+                {/* Credits / Tier Badge */}
+                <div 
+                  onClick={() => setActiveTab('billing')}
+                  className="cursor-pointer ml-1 px-3 py-1 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-full flex items-center gap-1.5 text-xs font-bold text-amber-900 transition"
+                  title="Click to manage subscription or purchase credits"
+                >
+                  <Zap className="w-3 h-3 text-amber-600 fill-amber-500" />
+                  <span>{isPro ? 'Pro Plan' : `${user?.scan_credits || 0} Credits`}</span>
+                </div>
+
                 {/* User Profile Pill & Logout */}
-                <div className="flex items-center gap-2 pl-3 border-l border-slate-200">
-                  <div className="hidden md:flex flex-col text-right">
-                    <span className="text-xs font-bold text-slate-900 truncate max-w-[140px]">{user?.email}</span>
-                    <span className="text-[10px] text-emerald-600 font-semibold">Authenticated</span>
-                  </div>
+                <div className="flex items-center gap-2 pl-2 border-l border-slate-200">
                   <button
                     type="button"
                     onClick={logout}
@@ -137,6 +182,13 @@ function MainApp() {
               <div className="flex items-center gap-2">
                 <button
                   type="button"
+                  onClick={() => setActiveTab('pricing')}
+                  className="px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition"
+                >
+                  Pricing
+                </button>
+                <button
+                  type="button"
                   onClick={() => setAuthModal('login')}
                   className="px-3.5 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-100 rounded-xl transition"
                 >
@@ -147,7 +199,7 @@ function MainApp() {
                   onClick={() => setAuthModal('register')}
                   className="px-4 py-1.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-sm transition"
                 >
-                  Create Account
+                  Get Started Free
                 </button>
               </div>
             )}
@@ -155,17 +207,27 @@ function MainApp() {
         </div>
       </header>
 
-      {/* Main Container */}
+      {/* Main Container Viewport */}
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 flex flex-col">
-        {!isAuthenticated ? (
-          /* Unauthenticated Landing / Gate */
+        {activeTab === 'pricing' ? (
+          <PricingPage
+            onNeedLogin={() => setAuthModal('login')}
+            onBillingSuccess={() => {
+              refreshUser();
+              setActiveTab('billing');
+            }}
+          />
+        ) : activeTab === 'billing' && isAuthenticated ? (
+          <BillingDashboard onNavigateToPricing={() => setActiveTab('pricing')} />
+        ) : !isAuthenticated ? (
+          /* Unauthenticated Landing */
           <div className="my-auto py-12 max-w-xl mx-auto text-center">
             <div className="w-16 h-16 bg-indigo-50 text-indigo-600 rounded-3xl flex items-center justify-center mx-auto mb-4 shadow-sm">
               <ShieldCheck className="w-8 h-8" />
             </div>
             <h2 className="text-3xl font-black text-slate-900">Academic Plagiarism Engine</h2>
             <p className="text-sm text-slate-500 mt-2">
-              Sign in to scan research papers, track your originality audit history, and access full Turnitin-style side-by-side diff reports.
+              Sign in to receive <strong>3 free document scans</strong>, or upgrade to Pro for unlimited document checks.
             </p>
             <div className="flex items-center justify-center gap-3 mt-6">
               <button
@@ -173,25 +235,23 @@ function MainApp() {
                 onClick={() => setAuthModal('login')}
                 className="px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm rounded-2xl shadow-md transition"
               >
-                Sign In to Your Account
+                Sign In to Scan
               </button>
               <button
                 type="button"
-                onClick={() => setAuthModal('register')}
+                onClick={() => setActiveTab('pricing')}
                 className="px-6 py-3 bg-white hover:bg-slate-50 text-slate-800 font-bold text-sm rounded-2xl border border-slate-200 shadow-sm transition"
               >
-                Register Free
+                View Plans & Pricing
               </button>
             </div>
           </div>
         ) : activeTab === 'history' ? (
-          /* Scan Audit History Table */
           <HistoryDashboard 
             onSelectReport={handleSelectHistoryReport}
             onNewScan={() => setActiveTab('scan')}
           />
         ) : activeTab === 'scan' ? (
-          /* Upload Component */
           <div className="my-auto py-8">
             <UploadComponent
               onScanComplete={handleScanComplete}
@@ -200,7 +260,7 @@ function MainApp() {
             />
           </div>
         ) : (
-          /* Report Screen: Split View */
+          /* Report Screen: Split Screen */
           report && (
             <div className="flex-1 flex flex-col gap-6">
               {/* Document Header Card */}
@@ -220,6 +280,7 @@ function MainApp() {
                   <div className="flex items-center gap-4 text-xs text-slate-500 mt-1">
                     <span><strong>{report.total_words}</strong> words</span>
                     <span><strong>{report.total_characters}</strong> characters</span>
+                    <span>Remaining Balance: <strong>{isPro ? 'Unlimited Pro' : `${user?.scan_credits} Credits`}</strong></span>
                   </div>
                 </div>
 
