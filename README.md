@@ -1,5 +1,7 @@
 # Turnitin-Style Academic Plagiarism Detection Engine
 
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/mohit4215/chalbecopykrega)
+
 A comprehensive, production-grade plagiarism detection system modeled after Turnitin and MOSS. Combines multi-tier NLP algorithms: **N-gram Rabin-Karp Winnowing**, **MinHash & Locality Sensitive Hashing (LSH)**, **HuggingFace Dense Semantic Embeddings (`all-MiniLM-L6-v2`)**, and **Live Internet Cross-Referencing (Bing / SERP API)** with an interactive, character-accurate React highlighting interface.
 
 ---
