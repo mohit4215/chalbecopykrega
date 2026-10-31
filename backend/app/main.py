@@ -1,29 +1,36 @@
+import os
 import uuid
-from typing import Optional, List
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException
+import tempfile
+import shutil
+from typing import Optional, List, Dict, Any
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, Field
 
 from app.config import settings
-from app.models.schemas import (
-    ScanReport, PlagiarismMatch, SourceBreakdown,
-    IngestDocumentRequest, IngestDocumentResponse
+from app.services.ingestion_pipeline import (
+    DocumentExtractionPipeline,
+    ExtractionResult,
+    IngestionPipelineError,
+    UnsupportedFormatError,
+    CorruptedFileError,
+    EmptyDocumentError
 )
-from app.services.document_parser import DocumentParser
-from app.services.winnowing import WinnowingEngine
-from app.services.semantic_matcher import SemanticMatcher
-from app.services.minhash_service import MinHashService
-from app.services.web_search import WebSearchCrossReferencer
-from app.services.vector_db import VectorDatabaseManager
-from app.utils.interval_merger import IntervalMerger
-from app.utils.text_utils import TextUtils
+from app.services.core_engine import (
+    InternalVectorDB,
+    LiveWebSearchClient,
+    CoreNLPMatcher,
+    PlagiarismDetectionEngine
+)
 
+# Initialize FastAPI application
 app = FastAPI(
-    title=settings.APP_NAME,
-    description="Turnitin-Style Multi-Stage Plagiarism Detection and Originality Engine",
-    version="1.0.0"
+    title="Turnitin-Style Academic Plagiarism Detection API",
+    description="High-performance document ingestion and hybrid NLP originality verification engine.",
+    version="2.0.0"
 )
 
-# Enable CORS for React Frontend
+# Configure Cross-Origin Resource Sharing (CORS) for React frontend
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -32,219 +39,283 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Initialize Core Services (Singletons)
-winnowing_engine = WinnowingEngine(k=settings.WINNOWING_K, w=settings.WINNOWING_W)
-semantic_matcher = SemanticMatcher(model_name=settings.EMBEDDING_MODEL_NAME)
-minhash_service = MinHashService()
-web_search_service = WebSearchCrossReferencer()
-vector_db = VectorDatabaseManager()
+# ------------------------------------------------------------------------------
+# Pydantic Schemas for Strict API Contracts
+# ------------------------------------------------------------------------------
+
+class PlagiarismMatchDetail(BaseModel):
+    id: str = Field(..., description="Unique identifier for this match occurrence")
+    matched_text: str = Field(..., description="Text chunk from uploaded document that matched a source")
+    start_index: int = Field(..., description="Character start index in the document text")
+    end_index: int = Field(..., description="Character end index in the document text")
+    similarity_score: float = Field(..., description="Confidence or similarity coefficient (0.0 - 1.0)")
+    match_type: str = Field(..., description="'exact_copy' or 'paraphrase'")
+    source_title: str = Field(..., description="Title of the matched paper, article, or web page")
+    source_url: Optional[str] = Field(None, description="External web link if matched via internet search")
+    source_id: Optional[str] = Field(None, description="Internal document identifier if matched via database")
+    source_author: Optional[str] = Field(None, description="Author or student attribution if available")
+    source_snippet: Optional[str] = Field(None, description="Exact snippet from the source for comparison")
+    source_category: str = Field(..., description="'Internet Source', 'Submitted Student Work', or 'Publications'")
+
+class PlagiarismSummary(BaseModel):
+    exact_matches_count: int
+    paraphrase_matches_count: int
+    internet_matches_count: int
+
+class CheckPlagiarismResponse(BaseModel):
+    document_id: str
+    document_title: str
+    overall_score: float = Field(..., description="Total plagiarism percentage (0.0 to 100.0)")
+    originality_score: float = Field(..., description="Total originality percentage (100.0 - overall_score)")
+    total_words: int
+    total_characters: int
+    full_text: str = Field(..., description="Full text for character-level highlight rendering on the frontend")
+    summary: PlagiarismSummary
+    matches: List[PlagiarismMatchDetail]
+
+class IngestCorpusRequest(BaseModel):
+    title: str
+    student_name: Optional[str] = "Anonymous Student"
+    text: str
+
+# ------------------------------------------------------------------------------
+# Singletons & Service Initialization
+# ------------------------------------------------------------------------------
+
+ingestion_pipeline = DocumentExtractionPipeline(chunk_size=50, chunk_overlap=20, enable_ocr=True)
+vector_db = InternalVectorDB(location=":memory:")
+web_search_client = LiveWebSearchClient()
+nlp_matcher = CoreNLPMatcher()
+plagiarism_engine = PlagiarismDetectionEngine(
+    vector_db=vector_db,
+    web_client=web_search_client,
+    matcher=nlp_matcher
+)
+
+# Pre-seed internal database with standard academic reference papers
+def _seed_sample_database():
+    sample_text_chunks = [
+        "Deep learning is a subset of machine learning, which is essentially a neural network with three or more layers. These neural networks attempt to simulate the behavior of the human brain.",
+        "Attention Is All You Need introduced the Transformer architecture based solely on attention mechanisms, dispensing with recurrence and convolutions entirely.",
+        "Convolutional neural networks are commonly used for image classification, while transformers have revolutionized natural language processing.",
+        "Stochastic gradient descent with momentum optimizes convex and non-convex loss landscapes in deep neural networks."
+    ]
+    vector_db.index_submission(
+        document_id="doc_ref_cs101_sample",
+        student_name="Alice Johnson (Spring 2025)",
+        title="Introduction to Neural Architectures and Attention Mechanisms",
+        chunks=sample_text_chunks
+    )
+
+_seed_sample_database()
+
+# ------------------------------------------------------------------------------
+# API Endpoints
+# ------------------------------------------------------------------------------
 
 @app.get("/api/health")
 async def health_check():
+    """Healthcheck endpoint for container orchestration and uptime monitoring."""
     return {
         "status": "healthy",
-        "app_name": settings.APP_NAME,
-        "indexed_documents": len(vector_db.in_memory_docs),
-        "indexed_chunks": len(vector_db.in_memory_chunks)
+        "service": "Turnitin-Style Plagiarism Detection Engine",
+        "vector_dim": vector_db.VECTOR_DIM
     }
 
-@app.post("/api/scan", response_model=ScanReport)
-async def scan_document(
-    file: Optional[UploadFile] = File(None),
-    raw_text_input: Optional[str] = Form(None),
-    title: Optional[str] = Form(None),
-    exclude_quotes: bool = Form(False),
-    exclude_bibliography: bool = Form(True),
-    enable_web_search: bool = Form(True)
+@app.post("/api/check-plagiarism", response_model=CheckPlagiarismResponse)
+async def check_plagiarism(
+    file: UploadFile = File(..., description="Uploaded document (PDF, DOCX, or TXT)"),
+    enable_web_search: bool = Form(True, description="Enable live internet cross-referencing via search APIs")
 ):
     """
-    Main Plagiarism Scanning Pipeline:
-    1. Extracts and normalizes text from PDF, DOCX, or TXT
-    2. Runs Winnowing Fingerprinting for exact/substring matches
-    3. Runs MinHash & HuggingFace Dense Embedding Cosine Similarity for paraphrase detection
-    4. Performs live external Web Search queries
-    5. Merges character intervals using Interval Union for true originality %
+    Main Plagiarism Verification Pipeline:
+      1. Receives uploaded PDF, DOCX, or TXT file
+      2. Extracts digital text or triggers OCR fallback on scanned documents
+      3. Normalizes Unicode and removes noisy headers/footers
+      4. Segments text into sequential overlapping chunks with start/end character offsets
+      5. Runs Qdrant vector similarity search against past student papers
+      6. Runs live internet search queries (SerpAPI / Bing Web Search)
+      7. Evaluates matches using N-gram Jaccard (exact) and Cosine Similarity (paraphrase)
+      8. Returns overall score and character index spans for frontend highlighter rendering
     """
-    # 1. Extraction
-    if file:
-        file_bytes = await file.read()
-        filename = file.filename or "Uploaded_Document.txt"
-        doc_title = title or filename
-        raw_text, meta = DocumentParser.extract_text(file_bytes, filename)
-    elif raw_text_input:
-        raw_text = DocumentParser.clean_text(raw_text_input)
-        doc_title = title or "Pasted Submission"
-    else:
-        raise HTTPException(status_code=400, detail="Please upload a file or paste document text.")
+    filename = file.filename or "Uploaded_Document.txt"
+    file_ext = os.path.splitext(filename)[1].lower()
 
-    if not raw_text or len(raw_text.strip()) < 20:
-        raise HTTPException(status_code=400, detail="Document content is too short for meaningful analysis.")
+    if file_ext not in [".pdf", ".docx", ".txt", ".md", ".rtf"]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Unsupported format '{file_ext}'. Supported formats: PDF, DOCX, and TXT."
+        )
 
-    total_chars = len(raw_text)
-    total_words = TextUtils.count_words(raw_text)
+    # 1. Save uploaded file to temporary path for parser processing
+    with tempfile.NamedTemporaryFile(suffix=file_ext, delete=False) as temp_file:
+        temp_path = temp_file.name
+        shutil.copyfileobj(file.file, temp_file)
 
-    # Effective scanning boundary (excluding bibliography if requested)
-    scan_limit = total_chars
-    if exclude_bibliography:
-        bib_offset = TextUtils.find_bibliography_offset(raw_text)
-        if bib_offset < total_chars:
-            scan_limit = bib_offset
+    try:
+        # 2. Extract, clean, and chunk document using the Ingestion Pipeline
+        extraction_result: ExtractionResult = ingestion_pipeline.ingest_document(temp_path)
+    except UnsupportedFormatError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except (CorruptedFileError, EmptyDocumentError) as e:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
+    except IngestionPipelineError as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+    finally:
+        # Cleanup temporary file
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
 
-    active_text = raw_text[:scan_limit]
+    # 3. Extract text chunk strings for NLP Vectorization
+    chunks = extraction_result.chunks
+    chunk_strings = [c.text for c in chunks]
 
-    # Quotes exclusion mask
-    quote_spans = TextUtils.extract_quotation_spans(active_text) if exclude_quotes else []
+    if not chunk_strings:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Document text is too brief to generate meaningful NLP chunks for scanning."
+        )
 
-    all_raw_matches: List[PlagiarismMatch] = []
-
-    # 2. Stage 1: Exact Match Fingerprinting via Winnowing
-    fingerprints = winnowing_engine.extract_fingerprints(active_text)
-    exact_hits = vector_db.search_exact_fingerprints(fingerprints)
-
-    if exact_hits:
-        # Group hits by source doc
-        grouped_hits = {}
-        for hit in exact_hits:
-            s_id = hit["source_id"]
-            if s_id not in grouped_hits:
-                grouped_hits[s_id] = []
-            grouped_hits[s_id].append((hit["query_start"], hit["query_end"], hit))
-
-        for s_id, hit_list in grouped_hits.items():
-            clusters = winnowing_engine.cluster_matched_fingerprints(hit_list, max_gap=60)
-            sample_hit = hit_list[0][2]
-            for c_start, c_end in clusters:
-                if c_end - c_start >= settings.WINNOWING_K:
-                    matched_snippet = raw_text[c_start:c_end]
-                    all_raw_matches.append(PlagiarismMatch(
-                        id=f"exact_{uuid.uuid4().hex[:8]}",
-                        start_char=c_start,
-                        end_char=c_end,
-                        matched_text=matched_snippet,
-                        source_title=sample_hit["source_title"],
-                        source_id=sample_hit["source_id"],
-                        source_snippet=matched_snippet,
-                        similarity_score=1.0,
-                        match_type="exact",
-                        source_category=sample_hit.get("source_category", "Submitted Works")
-                    ))
-
-    # 3. Stage 2: Paraphrase Detection via Dense Semantic Chunks
-    chunks = semantic_matcher.segment_text(active_text)
-    if chunks:
-        chunk_texts = [c.text for c in chunks]
-        embeddings = semantic_matcher.compute_embeddings(chunk_texts)
-        semantic_hits = vector_db.search_semantic_chunks(chunks, embeddings)
-
-        for hit in semantic_hits:
-            # Avoid redundant exact duplicate reporting if already covered
-            all_raw_matches.append(PlagiarismMatch(
-                id=f"para_{uuid.uuid4().hex[:8]}",
-                start_char=hit["start_char"],
-                end_char=hit["end_char"],
-                matched_text=hit["matched_text"],
-                source_title=hit["source_title"],
-                source_id=hit["source_id"],
-                source_snippet=hit["source_snippet"],
-                similarity_score=hit["similarity_score"],
-                match_type=hit["match_type"],
-                source_category=hit["source_category"]
-            ))
-
-    # 4. Stage 3: External Live Web Cross-Referencing
-    if enable_web_search and chunks:
-        web_hits = await web_search_service.cross_reference_chunks(chunks, semantic_matcher)
-        for hit in web_hits:
-            all_raw_matches.append(PlagiarismMatch(
-                id=f"web_{uuid.uuid4().hex[:8]}",
-                start_char=hit["start_char"],
-                end_char=hit["end_char"],
-                matched_text=hit["matched_text"],
-                source_title=hit["source_title"],
-                source_url=hit.get("source_url"),
-                source_snippet=hit["source_snippet"],
-                similarity_score=hit["similarity_score"],
-                match_type="web",
-                source_category="Internet"
-            ))
-
-    # Filter out matches inside quotes if exclude_quotes is enabled
-    final_matches: List[PlagiarismMatch] = []
-    for m in all_raw_matches:
-        if exclude_quotes and any(qs <= m.start_char and m.end_char <= qe for qs, qe in quote_spans):
-            continue
-        final_matches.append(m)
-
-    # 5. Non-overlapping Coverage & Originality Calculation
-    all_intervals = [(m.start_char, m.end_char) for m in final_matches]
-    overall_sim_pct = IntervalMerger.calculate_coverage(all_intervals, total_chars)
-    originality_pct = round(100.0 - overall_sim_pct, 2)
-
-    # Source breakdown
-    cat_breakdown = IntervalMerger.calculate_category_breakdown(
-        [m.dict() for m in final_matches], total_chars
-    )
-    breakdown = SourceBreakdown(
-        internet_percentage=cat_breakdown.get("Internet", 0.0),
-        internal_db_percentage=cat_breakdown.get("Submitted Works", 0.0),
-        publications_percentage=cat_breakdown.get("Publications", 0.0)
-    )
-
-    return ScanReport(
-        document_id=str(uuid.uuid4()),
-        title=doc_title,
-        total_characters=total_chars,
-        total_words=total_words,
-        overall_similarity_percentage=overall_sim_pct,
-        originality_percentage=originality_pct,
-        sources_breakdown=breakdown,
-        matches=final_matches,
-        raw_text=raw_text
-    )
-
-@app.post("/api/ingest", response_model=IngestDocumentResponse)
-async def ingest_reference_document(payload: IngestDocumentRequest):
-    """
-    Ingest a reference document (past student paper, journal article, etc.)
-    into the internal vector and fingerprint database.
-    """
-    if not payload.text or len(payload.text.strip()) < 20:
-        raise HTTPException(status_code=400, detail="Document text is too short to ingest.")
-
-    doc_id = vector_db.insert_document_sync(
-        title=payload.title,
-        author=payload.author or "Anonymous",
-        text=payload.text,
-        category="Submitted Works"
-    )
-
-    return IngestDocumentResponse(
+    # 4. Execute Core Detection Engine (Vector DB + Web Search + NLP Matching)
+    doc_id = str(uuid.uuid4())
+    scan_report = await plagiarism_engine.scan_document_chunks(
         document_id=doc_id,
-        title=payload.title,
-        chunks_indexed=len([c for c in vector_db.in_memory_chunks if c["doc_id"] == doc_id]),
-        fingerprints_indexed=sum(1 for fp_list in vector_db.in_memory_fingerprints.values() for hit in fp_list if hit["doc_id"] == doc_id),
-        status="Successfully indexed into corpus"
+        document_title=filename,
+        chunks=chunk_strings,
+        enable_web_search=enable_web_search
     )
 
-@app.get("/api/documents")
-async def list_indexed_documents():
-    """Lists summary of reference documents in the database."""
-    docs = []
-    for d in vector_db.in_memory_docs.values():
-        docs.append({
-            "id": d["id"],
-            "title": d["title"],
-            "author": d["author"],
-            "total_characters": d["total_characters"],
-            "category": d.get("category", "Submitted Works")
-        })
-    return docs
+    # 5. Format Matches with exact start_index and end_index offsets
+    formatted_matches: List[PlagiarismMatchDetail] = []
+    for idx, match_item in enumerate(scan_report.get("matches", [])):
+        chunk_idx = match_item["chunk_index"]
+        corresponding_chunk = chunks[chunk_idx]
 
-# Optional Static Files Mount (serves frontend if built in production)
-import os
-from fastapi.staticfiles import StaticFiles
+        formatted_matches.append(PlagiarismMatchDetail(
+            id=f"match_{idx}_{uuid.uuid4().hex[:6]}",
+            matched_text=corresponding_chunk.text,
+            start_index=corresponding_chunk.start_char,
+            end_index=corresponding_chunk.end_char,
+            similarity_score=match_item["confidence_score"],
+            match_type=match_item["match_type"],
+            source_title=match_item["source_title"],
+            source_url=match_item.get("source_url"),
+            source_id=match_item.get("source_id"),
+            source_author=match_item.get("source_author"),
+            source_snippet=match_item.get("source_snippet"),
+            source_category=match_item.get("source_category", "Internet Source")
+        ))
 
+    # 6. Build and return structured response
+    return CheckPlagiarismResponse(
+        document_id=doc_id,
+        document_title=filename,
+        overall_score=scan_report["overall_plagiarism_percentage"],
+        originality_score=scan_report["originality_percentage"],
+        total_words=extraction_result.metadata.total_words,
+        total_characters=extraction_result.metadata.total_characters_cleaned,
+        full_text=extraction_result.cleaned_text,
+        summary=PlagiarismSummary(
+            exact_matches_count=scan_report["summary"]["exact_matches_count"],
+            paraphrase_matches_count=scan_report["summary"]["paraphrase_matches_count"],
+            internet_matches_count=scan_report["summary"]["internet_matches_count"]
+        ),
+        matches=formatted_matches
+    )
+
+@app.post("/api/scan")
+async def scan_alias(
+    file: Optional[UploadFile] = File(None),
+    raw_text_input: Optional[str] = Form(None),
+    enable_web_search: bool = Form(True)
+):
+    """Backwards-compatibility alias for the scan endpoint."""
+    if file:
+        return await check_plagiarism(file=file, enable_web_search=enable_web_search)
+    elif raw_text_input:
+        # Wrap raw text into a temporary file
+        with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False, encoding="utf-8") as f:
+            f.write(raw_text_input)
+            tpath = f.name
+        try:
+            extraction_result = ingestion_pipeline.ingest_document(tpath)
+            chunk_strings = [c.text for c in extraction_result.chunks]
+            doc_id = str(uuid.uuid4())
+            scan_report = await plagiarism_engine.scan_document_chunks(
+                document_id=doc_id,
+                document_title="Pasted Text Submission",
+                chunks=chunk_strings,
+                enable_web_search=enable_web_search
+            )
+            formatted_matches = []
+            for idx, m in enumerate(scan_report.get("matches", [])):
+                c = extraction_result.chunks[m["chunk_index"]]
+                formatted_matches.append(PlagiarismMatchDetail(
+                    id=f"match_{idx}_{uuid.uuid4().hex[:6]}",
+                    matched_text=c.text,
+                    start_index=c.start_char,
+                    end_index=c.end_char,
+                    similarity_score=m["confidence_score"],
+                    match_type=m["match_type"],
+                    source_title=m["source_title"],
+                    source_url=m.get("source_url"),
+                    source_id=m.get("source_id"),
+                    source_author=m.get("source_author"),
+                    source_snippet=m.get("source_snippet"),
+                    source_category=m.get("source_category", "Internet Source")
+                ))
+            return CheckPlagiarismResponse(
+                document_id=doc_id,
+                document_title="Pasted Text Submission",
+                overall_score=scan_report["overall_plagiarism_percentage"],
+                originality_score=scan_report["originality_percentage"],
+                total_words=extraction_result.metadata.total_words,
+                total_characters=extraction_result.metadata.total_characters_cleaned,
+                full_text=extraction_result.cleaned_text,
+                summary=PlagiarismSummary(
+                    exact_matches_count=scan_report["summary"]["exact_matches_count"],
+                    paraphrase_matches_count=scan_report["summary"]["paraphrase_matches_count"],
+                    internet_matches_count=scan_report["summary"]["internet_matches_count"]
+                ),
+                matches=formatted_matches
+            )
+        finally:
+            if os.path.exists(tpath):
+                os.remove(tpath)
+    else:
+        raise HTTPException(status_code=400, detail="Please upload a file or provide text.")
+
+@app.post("/api/ingest-corpus")
+async def ingest_corpus_document(payload: IngestCorpusRequest):
+    """Seeds reference papers or past student submissions into the internal vector database."""
+    if not payload.text or len(payload.text.strip()) < 30:
+        raise HTTPException(status_code=400, detail="Text too short to index into corpus.")
+
+    with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False, encoding="utf-8") as f:
+        f.write(payload.text)
+        tpath = f.name
+    try:
+        extraction_result = ingestion_pipeline.ingest_document(tpath)
+        chunks = [c.text for c in extraction_result.chunks]
+        doc_id = str(uuid.uuid4())
+        indexed_count = vector_db.index_submission(
+            document_id=doc_id,
+            student_name=payload.student_name or "Anonymous Student",
+            title=payload.title,
+            chunks=chunks
+        )
+        return {
+            "document_id": doc_id,
+            "title": payload.title,
+            "chunks_indexed": indexed_count,
+            "status": "Successfully indexed in Qdrant Vector DB"
+        }
+    finally:
+        if os.path.exists(tpath):
+            os.remove(tpath)
+
+# Static files mount for production frontend bundle
 static_dist_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../frontend/dist"))
 if os.path.isdir(static_dist_path):
+    from fastapi.staticfiles import StaticFiles
     app.mount("/", StaticFiles(directory=static_dist_path, html=True), name="static")
-

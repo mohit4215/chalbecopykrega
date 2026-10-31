@@ -1,38 +1,37 @@
 import React, { useState } from 'react';
 import { 
   ShieldCheck, 
-  RefreshCw, 
+  ArrowLeft, 
   Printer, 
-  FileSpreadsheet, 
-  HelpCircle,
-  ArrowLeft
+  FileCheck, 
+  Layers
 } from 'lucide-react';
 
-import FileUpload from './components/FileUpload';
+import UploadComponent from './components/UploadComponent';
+import ScoreGauge from './components/ScoreGauge';
 import DocumentViewer from './components/DocumentViewer';
-import SimilarityGauge from './components/SimilarityGauge';
-import MatchList from './components/MatchList';
-import ComparisonDrawer from './components/ComparisonDrawer';
+import SourcesSidebar from './components/SourcesSidebar';
+import DiffModal from './components/DiffModal';
 
 export default function App() {
   const [report, setReport] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [selectedMatch, setSelectedMatch] = useState(null);
-  const [isComparisonOpen, setIsComparisonOpen] = useState(false);
+  const [isDiffOpen, setIsDiffOpen] = useState(false);
 
   const handleSelectMatch = (match) => {
     setSelectedMatch(match);
   };
 
-  const handleOpenComparison = (match) => {
+  const handleOpenDiff = (match) => {
     setSelectedMatch(match);
-    setIsComparisonOpen(true);
+    setIsDiffOpen(true);
   };
 
   const handleReset = () => {
     setReport(null);
     setSelectedMatch(null);
-    setIsComparisonOpen(false);
+    setIsDiffOpen(false);
   };
 
   const handlePrint = () => {
@@ -40,23 +39,23 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-100/70 flex flex-col font-sans">
-      {/* Top Navigation Bar */}
+    <div className="min-h-screen bg-slate-100/60 flex flex-col font-sans antialiased text-slate-900">
+      {/* Top Application Navbar */}
       <header className="bg-white border-b border-slate-200 sticky top-0 z-30 no-print">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-sm">
-              <ShieldCheck className="w-5 h-5" />
+            <div className="w-10 h-10 rounded-2xl bg-indigo-600 text-white flex items-center justify-center shadow-md shadow-indigo-100">
+              <ShieldCheck className="w-6 h-6" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="text-base font-bold text-slate-900 leading-none">Turnitin OriginalityGuard</h1>
-                <span className="px-1.5 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider bg-indigo-50 text-indigo-700 border border-indigo-200">
-                  v2.0 NLP
+                <h1 className="text-base font-extrabold text-slate-900 leading-none">Turnitin OriginalityGuard</h1>
+                <span className="px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider bg-indigo-50 text-indigo-700 border border-indigo-200">
+                  FastAPI + React
                 </span>
               </div>
               <p className="text-[11px] text-slate-500 mt-0.5">
-                N-gram Winnowing • MinHash LSH • HuggingFace Dense Paraphrase Detection
+                Multi-Stage Document Extraction • Qdrant Vector Search • Live Web Verification
               </p>
             </div>
           </div>
@@ -71,7 +70,7 @@ export default function App() {
               <button
                 type="button"
                 onClick={handlePrint}
-                className="px-3 py-1.5 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg flex items-center gap-1.5 transition"
+                className="px-3.5 py-2 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl flex items-center gap-1.5 transition"
               >
                 <Printer className="w-3.5 h-3.5" />
                 <span className="hidden sm:inline">Print Report</span>
@@ -80,77 +79,77 @@ export default function App() {
               <button
                 type="button"
                 onClick={handleReset}
-                className="px-3 py-1.5 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg flex items-center gap-1.5 transition shadow-sm"
+                className="px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl flex items-center gap-1.5 transition shadow-sm"
               >
                 <ArrowLeft className="w-3.5 h-3.5" />
-                <span>New Scan</span>
+                <span>Upload New File</span>
               </button>
             </div>
           )}
         </div>
       </header>
 
-      {/* Main Container */}
+      {/* Main Workspace */}
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 flex flex-col">
         {!report ? (
-          <div className="my-auto">
-            <FileUpload 
-              onScanComplete={(newReport) => setReport(newReport)}
+          <div className="my-auto py-8">
+            <UploadComponent 
+              onScanComplete={(data) => setReport(data)}
               isLoading={isLoading}
               setIsLoading={setIsLoading}
             />
           </div>
         ) : (
           <div className="flex-1 flex flex-col gap-6">
-            {/* Report Header Banner */}
+            {/* Document Header Card */}
             <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
-                <span className="text-[11px] font-bold uppercase tracking-wider text-indigo-600">
-                  Originality & Similarity Audit
+                <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-600">
+                  Plagiarism Audit Dashboard
                 </span>
-                <h2 className="text-xl font-bold text-slate-900 mt-0.5">
-                  {report.title}
+                <h2 className="text-xl font-black text-slate-900 mt-0.5">
+                  {report.document_title}
                 </h2>
                 <p className="text-xs text-slate-500 mt-1">
-                  Submission ID: <code className="bg-slate-100 px-1.5 py-0.5 rounded text-slate-700">{report.document_id || 'LOCAL-SCAN'}</code>
+                  Submission ID: <code className="bg-slate-100 px-1.5 py-0.5 rounded text-slate-700 font-mono text-[11px]">{report.document_id}</code>
                 </p>
               </div>
 
               <div className="flex items-center gap-3">
                 <div className="text-right">
                   <div className="text-2xl font-black text-slate-900">
-                    {report.overall_similarity_percentage}%
+                    {report.overall_score}%
                   </div>
-                  <div className="text-[10px] uppercase font-bold text-slate-400">Similarity Index</div>
+                  <div className="text-[10px] uppercase font-bold text-slate-400">Total Plagiarism</div>
                 </div>
               </div>
             </div>
 
-            {/* Turnitin Two-Column Split Workspace */}
+            {/* Turnitin Split-Screen Layout */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start flex-1 min-h-[640px]">
-              {/* Document Highlighter Viewer (8 cols) */}
+              {/* Left Pane (8 Cols): Full Document Viewer with Highlight Spans */}
               <div className="lg:col-span-8 h-full min-h-[620px] flex flex-col">
                 <DocumentViewer
-                  rawText={report.raw_text}
+                  fullText={report.full_text}
                   matches={report.matches}
                   selectedMatchId={selectedMatch?.id}
                   onSelectMatch={handleSelectMatch}
                 />
               </div>
 
-              {/* Sidebar: Turnitin Gauge & Matches Drawer (4 cols) */}
+              {/* Right Pane (4 Cols): Gauge & Clickable Sources List */}
               <div className="lg:col-span-4 space-y-6">
-                <SimilarityGauge
-                  similarityPct={report.overall_similarity_percentage}
-                  originalityPct={report.originality_percentage}
-                  breakdown={report.sources_breakdown}
+                <ScoreGauge
+                  overallScore={report.overall_score}
+                  originalityScore={report.originality_score}
+                  summary={report.summary}
                 />
 
-                <MatchList
+                <SourcesSidebar
                   matches={report.matches}
                   selectedMatchId={selectedMatch?.id}
                   onSelectMatch={handleSelectMatch}
-                  onOpenComparison={handleOpenComparison}
+                  onOpenDiff={handleOpenDiff}
                 />
               </div>
             </div>
@@ -158,11 +157,11 @@ export default function App() {
         )}
       </main>
 
-      {/* Comparison Drawer / Side-by-Side Modal */}
-      <ComparisonDrawer
+      {/* Side-by-Side Snippet Comparison Modal */}
+      <DiffModal
         match={selectedMatch}
-        isOpen={isComparisonOpen}
-        onClose={() => setIsComparisonOpen(false)}
+        isOpen={isDiffOpen}
+        onClose={() => setIsDiffOpen(false)}
       />
     </div>
   );
