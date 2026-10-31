@@ -1,25 +1,39 @@
 version: '3.8'
 
+# ==============================================================================
+# Production Docker Compose Orchestration
+# Stack: Qdrant Vector DB + FastAPI Backend + React Nginx Reverse Proxy
+# ==============================================================================
+
 services:
-  db:
-    image: pgvector/pgvector:pg16
-    container_name: plagiarism_db
+  # ----------------------------------------------------------------------------
+  # 1. Vector Database Service (Qdrant)
+  # ----------------------------------------------------------------------------
+  vector-db:
+    image: qdrant/qdrant:v1.8.4
+    container_name: plagiarism_vectordb
     restart: always
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgrespassword
-      POSTGRES_DB: plagiarism_db
-    ports:
-      - "5432:5432"
+      - QDRANT__SERVICE__GRPC_PORT=6334
+      - QDRANT__SERVICE__HTTP_PORT=6333
+      - QDRANT__STORAGE__PERFORMANCE__MAX_SEARCH_THREADS=4
     volumes:
-      - pgdata:/var/lib/postgresql/data
-      - ./backend/schema.sql:/docker-entrypoint-initdb.d/schema.sql
+      - qdrant_storage:/qdrant/storage
+    ports:
+      # Exposes Qdrant Web Dashboard on http://localhost:6333/dashboard
+      - "6333:6333"
+    networks:
+      - plagiarism_network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d plagiarism_db"]
-      interval: 5s
+      test: ["CMD-SHELL", "curl -f http://localhost:6333/readyz || exit 1"]
+      interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 15s
 
+  # ----------------------------------------------------------------------------
+  # 2. FastAPI NLP & Plagiarism Detection Backend
+  # ----------------------------------------------------------------------------
   backend:
     build:
       context: ./backend
@@ -27,18 +41,67 @@ services:
     container_name: plagiarism_backend
     restart: always
     depends_on:
-      db:
+      vector-db:
+        condition: service_healthy
+    environment:
+      - PORT=8000
+      - QDRANT_URL=http://vector-db:6333
+      - QDRANT_COLLECTION_NAME=student_submissions
+      - USE_IN_MEMORY_FALLBACK=false
+      - SERPAPI_API_KEY=${SERPAPI_API_KEY:-}
+      - BING_SEARCH_API_KEY=${BING_SEARCH_API_KEY:-}
+      - EMBEDDING_MODEL_NAME=sentence-transformers/all-MiniLM-L6-v2
+      - HF_HOME=/app/cache/huggingface
+      - ENABLE_OCR=true
+    volumes:
+      # Persistent cache for SentenceTransformer model weights
+      - model_cache:/app/cache/huggingface
+    networks:
+      - plagiarism_network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/api/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # ----------------------------------------------------------------------------
+  # 3. React Frontend & Nginx API Gateway Reverse Proxy
+  # ----------------------------------------------------------------------------
+  frontend:
+    build:
+      context: .
+      dockerfile: ./frontend/Dockerfile
+    container_name: plagiarism_frontend
+    restart: always
+    depends_on:
+      backend:
         condition: service_healthy
     ports:
-      - "8000:8000"
-    environment:
-      DATABASE_URL: postgresql://postgres:postgrespassword@db:5432/plagiarism_db
-      USE_IN_MEMORY_FALLBACK: "false"
-      SERPAPI_API_KEY: "${SERPAPI_API_KEY:-}"
-      BING_SEARCH_API_KEY: "${BING_SEARCH_API_KEY:-}"
-      PORT: 8000
-    volumes:
-      - ./backend/app:/app/app
+      # Main Production HTTP Port
+      - "80:80"
+    networks:
+      - plagiarism_network
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost/ || exit 1"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
+# ------------------------------------------------------------------------------
+# Isolated Internal Docker Network
+# ------------------------------------------------------------------------------
+networks:
+  plagiarism_network:
+    name: plagiarism_prod_network
+    driver: bridge
+
+# ------------------------------------------------------------------------------
+# Persistent Data Volumes
+# ------------------------------------------------------------------------------
 volumes:
-  pgdata:
+  qdrant_storage:
+    name: plagiarism_qdrant_data
+  model_cache:
+    name: plagiarism_model_cache
