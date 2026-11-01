@@ -47,21 +47,36 @@ export function AuthProvider({ children }) {
   };
 
   const login = async (email, password) => {
-    const res = await fetch(`${apiBase}/api/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
-    });
+    console.log(`[Auth] Attempting login to ${apiBase}/api/login for:`, email);
+    try {
+      const res = await fetch(`${apiBase}/api/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
 
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      throw new Error(data.detail || 'Invalid email or password');
+      console.log(`[Auth] Response status: ${res.status} (${res.statusText})`);
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        console.error('[Auth] Server rejected login:', res.status, errorData);
+        const errorMessage = errorData.detail 
+          ? (typeof errorData.detail === 'string' ? errorData.detail : JSON.stringify(errorData.detail))
+          : `HTTP ${res.status}: Failed to authenticate`;
+        throw new Error(errorMessage);
+      }
+
+      const data = await res.json();
+      console.log('[Auth] Login successful. Received token:', data.access_token?.slice(0, 10) + '...');
+      setToken(data.access_token);
+      setUser(data.user);
+      localStorage.setItem('originality_token', data.access_token);
+      localStorage.setItem('originality_user', JSON.stringify(data.user));
+      return data.user;
+    } catch (err) {
+      console.error('[Auth] Network or parsing exception during login:', err);
+      throw err;
     }
-
-    const data = await res.json();
-    setToken(data.access_token);
-    setUser(data.user);
-    return data.user;
   };
 
   const logout = () => {

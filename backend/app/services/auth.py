@@ -20,12 +20,24 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/login", auto_error=False)
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """Verifies a raw password against its bcrypt hash."""
-    return pwd_context.verify(plain_password, hashed_password)
+    """Verifies a raw password against its bcrypt hash with fallback."""
+    try:
+        return pwd_context.verify(plain_password, hashed_password)
+    except Exception:
+        try:
+            import bcrypt
+            return bcrypt.checkpw(plain_password.encode('utf-8'), hashed_password.encode('utf-8'))
+        except Exception:
+            return False
 
 def hash_password(password: str) -> str:
-    """Computes bcrypt hash of a raw password."""
-    return pwd_context.hash(password)
+    """Computes bcrypt hash of a raw password with fallback."""
+    try:
+        return pwd_context.hash(password)
+    except Exception:
+        import bcrypt
+        salt = bcrypt.gensalt()
+        return bcrypt.hashpw(password.encode('utf-8'), salt).decode('utf-8')
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
     """Encodes claims into a signed JSON Web Token."""

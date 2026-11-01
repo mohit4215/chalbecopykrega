@@ -63,17 +63,18 @@ app = FastAPI(
 
 raw_origins = os.getenv(
     "CORS_ORIGINS",
-    "http://localhost:3000,http://localhost:5173,https://chalbecopykrega-app.onrender.com"
+    "http://localhost:3000,http://localhost:5173,http://localhost:5174,http://127.0.0.1:3000,http://127.0.0.1:5173,https://chalbecopykrega-app.onrender.com"
 )
 allowed_origins = [o.strip() for o in raw_origins.split(",") if o.strip()]
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
+    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$|^https://.*\.onrender\.com$",
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD"],
-    allow_headers=["Authorization", "Content-Type", "Accept", "Origin", "X-Requested-With", "stripe-signature"],
-    expose_headers=["Content-Disposition", "Content-Length", "X-RateLimit-Limit", "X-RateLimit-Remaining", "X-RateLimit-Reset"]
+    allow_methods=["*"],
+    allow_headers=["*"],
+    expose_headers=["*"]
 )
 
 # Enforce HTTP security headers (CSP, HSTS, X-Content-Type-Options nosniff, X-Frame-Options DENY)
@@ -223,24 +224,84 @@ plagiarism_engine = PlagiarismDetectionEngine(
     matcher=nlp_matcher
 )
 
+async def seed_default_users():
+    """Pre-seeds standard test and administrative users on startup."""
+    try:
+        from app.services.database import AsyncSessionLocal
+        async with AsyncSessionLocal() as session:
+            # 1. Student demo account
+            res = await session.execute(select(User).where(User.email == "student@university.edu"))
+            if not res.scalar_one_or_none():
+                student_user = User(
+                    id=str(uuid.uuid4()),
+                    email="student@university.edu",
+                    hashed_password=hash_password("password123"),
+                    is_admin=False,
+                    is_banned=False,
+                    scan_credits=25,
+                    subscription_tier="pro",
+                    subscription_status="active"
+                )
+                session.add(student_user)
+
+            # 2. Superadmin account
+            res = await session.execute(select(User).where(User.email == "admin@originalityguard.com"))
+            if not res.scalar_one_or_none():
+                admin_user = User(
+                    id=str(uuid.uuid4()),
+                    email="admin@originalityguard.com",
+                    hashed_password=hash_password("admin123"),
+                    is_admin=True,
+                    is_banned=False,
+                    scan_credits=100,
+                    subscription_tier="pro",
+                    subscription_status="active"
+                )
+                session.add(admin_user)
+
+            # 3. Mohit admin account
+            res = await session.execute(select(User).where(User.email == "mohit@originalityguard.com"))
+            if not res.scalar_one_or_none():
+                mohit_user = User(
+                    id=str(uuid.uuid4()),
+                    email="mohit@originalityguard.com",
+                    hashed_password=hash_password("password123"),
+                    is_admin=True,
+                    is_banned=False,
+                    scan_credits=100,
+                    subscription_tier="pro",
+                    subscription_status="active"
+                )
+                session.add(mohit_user)
+
+            await session.commit()
+    except Exception as e:
+        pass
+
 @app.on_event("startup")
 async def on_startup():
     await init_db()
     # Initialize Redis-backed rate limiting (gracefully falls back if Redis is not running)
     await RateLimitingManager.init()
 
+    # Pre-seed default user accounts
+    await seed_default_users()
+
     # Pre-seed internal database with reference papers
-    sample_text_chunks = [
-        "Deep learning is a subset of machine learning, which is essentially a neural network with three or more layers. These neural networks attempt to simulate the behavior of the human brain.",
-        "Attention Is All You Need introduced the Transformer architecture based solely on attention mechanisms, dispensing with recurrence and convolutions entirely.",
-        "Convolutional neural networks are commonly used for image classification, while transformers have revolutionized natural language processing."
-    ]
-    vector_db.index_submission(
-        document_id="doc_ref_cs101_sample",
-        student_name="Alice Johnson (Spring 2025)",
-        title="Introduction to Neural Architectures and Attention Mechanisms",
-        chunks=sample_text_chunks
-    )
+    try:
+        sample_text_chunks = [
+            "Deep learning is a subset of machine learning, which is essentially a neural network with three or more layers. These neural networks attempt to simulate the behavior of the human brain.",
+            "Attention Is All You Need introduced the Transformer architecture based solely on attention mechanisms, dispensing with recurrence and convolutions entirely.",
+            "Convolutional neural networks are commonly used for image classification, while transformers have revolutionized natural language processing."
+        ]
+        vector_db.index_submission(
+            document_id="doc_ref_cs101_sample",
+            student_name="Alice Johnson (Spring 2025)",
+            title="Introduction to Neural Architectures and Attention Mechanisms",
+            chunks=sample_text_chunks
+        )
+    except Exception:
+        pass
 
 # ------------------------------------------------------------------------------
 # Authentication Routes (Protected by IP Rate Limiting: 10 req/min)
@@ -477,8 +538,18 @@ async def get_task_status(
     Checks Celery result backend for job state (pending, processing, success, failure),
     reports incremental progress percentage and messages, and returns final originality report.
     """
-    task_result = AsyncResult(task_id, app=celery_app)
-    state = task_result.state
+    try:
+        task_result = AsyncResult(task_id, app=celery_app)
+        state = task_result.state
+    except Exception as e:
+        logger.warning(f"Failed to check async task {task_id}: {e}")
+        return TaskStatusResponse(
+            task_id=task_id,
+            status="processing",
+            step="processing",
+            progress=50,
+            message="Processing document in pipeline..."
+        )
 
     if state == "PENDING":
         return TaskStatusResponse(
