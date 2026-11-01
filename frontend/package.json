@@ -12,10 +12,15 @@
     "lint": "eslint src --ext .js,.jsx"
   },
   "dependencies": {
+    "clsx": "^2.1.0",
+    "framer-motion": "^11.0.8",
     "lucide-react": "^0.359.0",
+    "posthog-js": "^1.131.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "react-dropzone": "^14.2.3"
+    "react-dropzone": "^14.2.3",
+    "react-joyride": "^2.8.2",
+    "tailwind-merge": "^2.2.1"
   },
   "devDependencies": {
     "@babel/core": "^7.24.0",

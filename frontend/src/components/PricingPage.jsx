@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { Check, Sparkles, Zap, Shield, ArrowRight, CreditCard } from 'lucide-react';
+import telemetry from '../services/telemetry';
 
 export default function PricingPage({ onBillingSuccess, onNeedLogin }) {
   const { user, isAuthenticated, authFetch } = useAuth();
@@ -15,6 +16,16 @@ export default function PricingPage({ onBillingSuccess, onNeedLogin }) {
     }
 
     setLoadingPlan(planId);
+    
+    // Telemetry: Funnel Step 3 - Stripe Checkout Initiated
+    telemetry.track('Stripe Checkout Initiated', {
+      plan_id: planId,
+      user_id: user?.id,
+      user_email: user?.email,
+      subscription_tier: user?.subscription_tier || 'free',
+      current_credits: user?.scan_credits || 0,
+    });
+
     try {
       const res = await authFetch('/api/create-checkout-session', {
         method: 'POST',

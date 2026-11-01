@@ -138,6 +138,7 @@ export default function SupportChatWidget() {
       {/* Floating Action Button for Help & Support */}
       <div className="fixed bottom-6 right-6 z-40 flex items-center gap-3">
         <button
+          id="tour-support-chat"
           type="button"
           onClick={handleOpenChat}
           className="group flex items-center gap-2.5 px-4 py-3 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-500 hover:to-indigo-600 text-white font-bold rounded-full shadow-xl hover:shadow-indigo-500/25 transition-all duration-200 hover:-translate-y-0.5 active:translate-y-0 text-sm border border-indigo-400/30"
