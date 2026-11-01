@@ -149,7 +149,7 @@ class PDFReportGenerator:
                     size: A4;
                     margin: 20mm 15mm 20mm 15mm;
                     @top-left {{
-                        content: "OriginalityGuard Academic Verification Audit";
+                        content: "Poach Academic Verification Audit";
                         font-size: 8px;
                         color: #94a3b8;
                     }}
@@ -285,7 +285,7 @@ class PDFReportGenerator:
                 <table style="width: 100%;">
                     <tr>
                         <td>
-                            <div class="title">OriginalityGuard</div>
+                            <div class="title">Poach</div>
                             <div class="sub-title">Academic Integrity & Plagiarism Audit Report</div>
                         </td>
                         <td style="text-align: right;">
@@ -407,7 +407,7 @@ class PDFReportGenerator:
         elements = []
 
         # Title
-        elements.append(Paragraph("<b>OriginalityGuard Plagiarism Audit Report</b>", styles["Title"]))
+        elements.append(Paragraph("<b>Poach Plagiarism Audit Report</b>", styles["Title"]))
         elements.append(Spacer(1, 10))
 
         # Metadata

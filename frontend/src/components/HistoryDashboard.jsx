@@ -40,7 +40,7 @@ export default function HistoryDashboard({ onSelectReport, onNewScan }) {
       const link = document.createElement('a');
       link.href = downloadUrl;
       const safeTitle = (item.filename || 'Document').replace(/[^a-zA-Z0-9_-]/g, '_');
-      link.download = `Originality_Report_${safeTitle}.pdf`;
+      link.download = `Poach_Originality_Report_${safeTitle}.pdf`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);

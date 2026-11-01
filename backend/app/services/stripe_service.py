@@ -23,7 +23,7 @@ stripe.api_key = STRIPE_SECRET_KEY
 # Plan Definitions & Unit Pricing
 PLANS = {
     "pro_monthly": {
-        "name": "OriginalityGuard Pro Subscription",
+        "name": "Poach Pro Subscription",
         "description": "Unlimited document scans, priority OCR processing, and live web cross-referencing.",
         "amount": 1900,  # $19.00 USD in cents
         "currency": "usd",

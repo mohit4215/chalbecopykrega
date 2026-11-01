@@ -63,7 +63,7 @@ logger = logging.getLogger("plagiarism.main")
 
 # Initialize FastAPI application
 app = FastAPI(
-    title="Turnitin-Style Plagiarism Detection & SaaS Monetization API",
+    title="Poach Plagiarism Detection & SaaS Monetization API",
     description="Originality checking with Stripe Subscriptions, Credits, and Webhook fulfillment.",
     version="4.0.0"
 )
@@ -254,35 +254,37 @@ async def seed_default_users():
                 )
                 session.add(student_user)
 
-            # 2. Superadmin account
-            res = await session.execute(select(User).where(User.email == "admin@originalityguard.com"))
-            if not res.scalar_one_or_none():
-                admin_user = User(
-                    id=str(uuid.uuid4()),
-                    email="admin@originalityguard.com",
-                    hashed_password=hash_password("admin123"),
-                    is_admin=True,
-                    is_banned=False,
-                    scan_credits=100,
-                    subscription_tier="pro",
-                    subscription_status="active"
-                )
-                session.add(admin_user)
+            # 2. Superadmin accounts
+            for admin_email in ("admin@poach.com", "admin@originalityguard.com"):
+                res = await session.execute(select(User).where(User.email == admin_email))
+                if not res.scalar_one_or_none():
+                    admin_user = User(
+                        id=str(uuid.uuid4()),
+                        email=admin_email,
+                        hashed_password=hash_password("admin123"),
+                        is_admin=True,
+                        is_banned=False,
+                        scan_credits=100,
+                        subscription_tier="pro",
+                        subscription_status="active"
+                    )
+                    session.add(admin_user)
 
-            # 3. Mohit admin account
-            res = await session.execute(select(User).where(User.email == "mohit@originalityguard.com"))
-            if not res.scalar_one_or_none():
-                mohit_user = User(
-                    id=str(uuid.uuid4()),
-                    email="mohit@originalityguard.com",
-                    hashed_password=hash_password("password123"),
-                    is_admin=True,
-                    is_banned=False,
-                    scan_credits=100,
-                    subscription_tier="pro",
-                    subscription_status="active"
-                )
-                session.add(mohit_user)
+            # 3. Mohit admin accounts
+            for mohit_email in ("mohit@poach.com", "mohit@originalityguard.com"):
+                res = await session.execute(select(User).where(User.email == mohit_email))
+                if not res.scalar_one_or_none():
+                    mohit_user = User(
+                        id=str(uuid.uuid4()),
+                        email=mohit_email,
+                        hashed_password=hash_password("password123"),
+                        is_admin=True,
+                        is_banned=False,
+                        scan_credits=100,
+                        subscription_tier="pro",
+                        subscription_status="active"
+                    )
+                    session.add(mohit_user)
 
             await session.commit()
     except Exception as e:
@@ -315,7 +317,7 @@ async def register_user(payload: RegisterRequest, db: AsyncSession = Depends(get
     if existing.scalar_one_or_none():
         raise HTTPException(status_code=400, detail="An account with this email address is already registered.")
 
-    admin_emails = [e.strip().lower() for e in os.getenv("ADMIN_EMAILS", "admin@originalityguard.com,mohit@originalityguard.com").split(",") if e.strip()]
+    admin_emails = [e.strip().lower() for e in os.getenv("ADMIN_EMAILS", "admin@poach.com,mohit@poach.com,admin@originalityguard.com,mohit@originalityguard.com").split(",") if e.strip()]
     is_admin = payload.email.lower() in admin_emails or os.getenv("INIT_ALL_ADMIN", "false").lower() == "true"
 
     new_user = User(
