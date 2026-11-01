@@ -12,7 +12,8 @@ import {
   LogOut, 
   X,
   Download,
-  Loader2
+  Loader2,
+  Lock
 } from 'lucide-react';
 
 import UploadComponent from './components/UploadComponent';
@@ -27,6 +28,7 @@ import LoginForm from './components/LoginForm';
 import RegisterForm from './components/RegisterForm';
 import AdminDashboard from './components/admin/AdminDashboard';
 import CookieConsent from './components/CookieConsent';
+import PrivacySettings from './components/PrivacySettings';
 
 function MainApp() {
   const { user, isAuthenticated, logout, updateUserCredits, refreshUser, authFetch } = useAuth();
@@ -180,6 +182,20 @@ function MainApp() {
                   <span className="hidden sm:inline">Billing</span>
                 </button>
 
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('privacy')}
+                  className={`px-3 py-1.5 text-xs font-bold rounded-xl flex items-center gap-1.5 transition ${
+                    activeTab === 'privacy'
+                      ? 'bg-indigo-600 text-white shadow-sm'
+                      : 'text-slate-600 hover:bg-slate-100'
+                  }`}
+                  title="Data Privacy & Compliance Settings"
+                >
+                  <Lock className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Privacy</span>
+                </button>
+
                 {/* Superadmin Navigation Pill */}
                 {user?.is_admin && (
                   <button
@@ -289,6 +305,8 @@ function MainApp() {
           />
         ) : activeTab === 'billing' && isAuthenticated ? (
           <BillingDashboard onNavigateToPricing={() => setActiveTab('pricing')} />
+        ) : activeTab === 'privacy' && isAuthenticated ? (
+          <PrivacySettings />
         ) : !isAuthenticated ? (
           /* Unauthenticated Landing */
           <div className="my-auto py-12 max-w-xl mx-auto text-center">

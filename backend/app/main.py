@@ -30,6 +30,7 @@ from app.services.auth import (
     ALGORITHM
 )
 from app.services.task_stream import subscribe_task_events, publish_task_event
+from app.services.storage_service import StorageService
 from app.services.stripe_service import StripeService, PLANS
 from app.services.pdf_generator import PDFReportGenerator
 from app.services.ingestion_pipeline import (
@@ -365,8 +366,114 @@ async def login_user(payload: LoginRequest, db: AsyncSession = Depends(get_db_se
     )
 
 @app.get("/api/me", response_model=UserResponse)
+@app.get("/api/users/me", response_model=UserResponse)
 async def get_my_profile(current_user: User = Depends(get_current_user)):
     return UserResponse(**current_user.to_dict())
+
+@app.delete("/api/users/me")
+@app.delete("/api/me")
+async def delete_my_account(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session)
+):
+    """
+    GDPR (Art. 17 Right to Erasure) & CCPA (§ 1798.105 Right to Delete):
+    Permanently deletes user account, cancels active Stripe subscription via Stripe API,
+    and hard-deletes all historical scans and associated S3 document files.
+    """
+    user_id = current_user.id
+    user_email = current_user.email
+    stripe_cust_id = current_user.stripe_customer_id
+
+    logger.info(f"[GDPR Right to Erasure] Initiating permanent account deletion for: {user_email} (ID: {user_id})")
+
+    # 1. Cancel active Stripe subscriptions via Stripe API
+    canceled_subs = 0
+    if stripe_cust_id:
+        try:
+            canceled_subs = await StripeService.cancel_customer_subscriptions(stripe_cust_id)
+        except Exception as stripe_err:
+            logger.error(f"Error canceling Stripe subscriptions during deletion of {user_email}: {stripe_err}")
+
+    # 2. Query all scan records for this user to extract S3 document keys
+    scans_query = select(ScanHistory).where(ScanHistory.user_id == user_id)
+    scans_res = await db.execute(scans_query)
+    user_scans = scans_res.scalars().all()
+    deleted_scans_count = len(user_scans)
+
+    s3_keys_to_purge = []
+    for scan in user_scans:
+        report_data = scan.report_json if isinstance(scan.report_json, dict) else {}
+        if "s3_key" in report_data:
+            s3_keys_to_purge.append(report_data["s3_key"])
+        if "file_path" in report_data:
+            s3_keys_to_purge.append(report_data["file_path"])
+        s3_keys_to_purge.append(f"scans/{user_id}/{scan.id}.pdf")
+        s3_keys_to_purge.append(f"documents/{user_id}/{scan.filename}")
+
+    # 3. Hard-delete all S3 document objects and the user's S3 folder prefix
+    purged_s3_files = 0
+    try:
+        purged_s3_files = StorageService.delete_files(s3_keys_to_purge)
+        purged_s3_files += StorageService.delete_user_prefix(user_id)
+    except Exception as s3_err:
+        logger.error(f"Error purging S3 storage during deletion of {user_email}: {s3_err}")
+
+    # 4. Hard-delete user record from the database (ScanHistory cascades)
+    await db.delete(current_user)
+    await db.commit()
+
+    logger.info(
+        f"[GDPR Right to Erasure Completed] User {user_email} permanently deleted: "
+        f"{deleted_scans_count} scans purged, {purged_s3_files} S3 files deleted, "
+        f"{canceled_subs} Stripe subscriptions canceled."
+    )
+
+    return {
+        "status": "success",
+        "message": "Your account, active subscriptions, and all document scan records have been permanently expunged in accordance with GDPR Article 17 and CCPA § 1798.105.",
+        "deleted_user_id": user_id,
+        "purged_scans_count": deleted_scans_count,
+        "purged_s3_files_count": purged_s3_files,
+        "canceled_stripe_subscriptions": canceled_subs,
+    }
+
+@app.get("/api/users/me/export")
+@app.get("/api/me/export")
+async def export_my_data(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session)
+):
+    """
+    GDPR (Art. 20 Right to Data Portability) & CCPA (§ 1798.100 Right to Know):
+    Exports all personal account data, subscription status, credit balance,
+    and complete scan audit records in machine-readable JSON format.
+    """
+    scans_query = select(ScanHistory).where(ScanHistory.user_id == current_user.id).order_by(desc(ScanHistory.created_at))
+    scans_res = await db.execute(scans_query)
+    user_scans = scans_res.scalars().all()
+
+    export_payload = {
+        "compliance_metadata": {
+            "legal_basis": "GDPR Article 20 (Right to Data Portability) & CCPA § 1798.100",
+            "export_timestamp": datetime.now(timezone.utc).isoformat(),
+            "controller": "Poach Technologies Inc.",
+            "data_subject_id": current_user.id,
+        },
+        "account_profile": current_user.to_dict(),
+        "scan_records_count": len(user_scans),
+        "scan_history": [
+            {
+                "scan_id": s.id,
+                "filename": s.filename,
+                "overall_score": round(s.overall_score, 2),
+                "created_at": s.created_at.isoformat() if s.created_at else None,
+                "report": s.report_json,
+            }
+            for s in user_scans
+        ]
+    }
+    return export_payload
 
 # ------------------------------------------------------------------------------
 # Stripe SaaS Monetization Endpoints
