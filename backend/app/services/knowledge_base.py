@@ -47,6 +47,28 @@ REFERENCE_CORPUS: List[Dict[str, Any]] = [
             "overfitting by penalising overly complex models.",
         ],
     },
+    {
+        "document_id": "doc_ref_sioyek_technical",
+        "student_name": "Ali H. R. (ahrm/sioyek)",
+        "title": "Sioyek: Research-Oriented Document Viewer Architecture",
+        "chunks": [
+            "Sioyek is a document viewer designed for reading research papers and technical books, featuring portal navigation for non-linear reading across document sections.",
+            "Portals allow linking paragraphs to referenced figures, tables, or mathematical formulas elsewhere in the text, displaying them without losing reading context.",
+            "Smart table of contents and outline extraction automatically parses document structures, enabling fast keyboard-centric movement across complex scientific literature.",
+            "Visual marks and ruler lines allow researchers to maintain line-level focus when reading complex mathematical derivations and multi-column academic papers.",
+        ],
+    },
+    {
+        "document_id": "doc_ref_mandelbrot_chaos",
+        "student_name": "Benoit B. Mandelbrot et al. (Springer)",
+        "title": "Fractals and Chaos: The Mandelbrot Set and Beyond",
+        "chunks": [
+            "The Mandelbrot set is defined in the complex plane as the set of complex numbers c for which the function f_c(z) = z^2 + c does not diverge when iterated from z = 0.",
+            "Fractal geometry characterizes irregular natural phenomena that exhibit self-similarity across varying scales of magnification.",
+            "Iterative polynomial dynamics reveal connected bifurcation boundaries and chaotic boundary structures in complex mathematical spaces.",
+            "Topological boundaries of the Mandelbrot set remain infinitely detailed under continuous zoom transformations while maintaining bounded measure.",
+        ],
+    },
 ]
 
 
