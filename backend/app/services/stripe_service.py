@@ -275,3 +275,37 @@ class StripeService:
                     return {"status": "canceled", "customer_id": customer_id}
 
         return {"status": "ignored", "event": event_type}
+
+    @classmethod
+    async def cancel_customer_subscriptions(cls, stripe_customer_id: Optional[str]) -> int:
+        """
+        Immediately cancels all active subscriptions for the given Stripe customer.
+        Used for GDPR Art. 17 right to erasure / account deletion.
+        """
+        if not stripe_customer_id or stripe_customer_id.startswith("cus_mock"):
+            logger.info(f"Skipping Stripe subscription cancellation for mock/empty customer: {stripe_customer_id}")
+            return 0
+
+        canceled_count = 0
+        try:
+            # Query all active subscriptions for the customer
+            subs = stripe.Subscription.list(customer=stripe_customer_id, status="active", limit=20)
+            for sub in subs.get("data", []):
+                try:
+                    stripe.Subscription.cancel(sub.id)
+                    canceled_count += 1
+                    logger.info(f"[GDPR] Canceled active Stripe subscription {sub.id} for customer {stripe_customer_id}")
+                except Exception as sub_err:
+                    logger.warning(f"Error canceling individual subscription {sub.id}: {sub_err}")
+
+            # Also delete or redact customer profile in Stripe
+            try:
+                stripe.Customer.delete(stripe_customer_id)
+                logger.info(f"[GDPR] Deleted Stripe Customer record: {stripe_customer_id}")
+            except Exception as cust_err:
+                logger.debug(f"Stripe Customer delete note: {cust_err}")
+
+            return canceled_count
+        except Exception as exc:
+            logger.error(f"Failed to cancel subscriptions for Stripe customer {stripe_customer_id}: {exc}")
+            return canceled_count

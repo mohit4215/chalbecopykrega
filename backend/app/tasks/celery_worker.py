@@ -185,6 +185,17 @@ celery_app.conf.update(
     },
 )
 
+# Automated GDPR / CCPA Data Retention Schedule (Celery Beat: Runs Daily at 02:00 AM UTC)
+from celery.schedules import crontab
+
+celery_app.conf.beat_schedule = {
+    "daily_purge_expired_scans_and_s3": {
+        "task": "purge_expired_data_retention_records",
+        "schedule": crontab(hour=2, minute=0),
+        "args": (30,),  # 30-day retention window
+    },
+}
+
 # Shared worker singletons
 try:
     _ingestion_pipeline = DocumentExtractionPipeline(chunk_size=50, chunk_overlap=20, enable_ocr=True)
@@ -422,3 +433,87 @@ def process_plagiarism_document(
                 os.remove(temp_file_path)
             except Exception:
                 pass
+
+
+async def execute_data_retention_purge(retention_days: int = 30, db_session=None) -> Dict[str, Any]:
+    """
+    Core implementation of the automated GDPR & CCPA Data Retention Purge.
+    Finds and permanently deletes all scan records and associated S3 documents
+    older than the retention period (default: 30 days).
+    """
+    from datetime import datetime, timezone, timedelta
+    from sqlalchemy import select, delete
+    from app.services.database import AsyncSessionLocal
+    from app.models.db_models import ScanHistory
+    from app.services.storage_service import StorageService
+
+    cutoff_date = datetime.now(timezone.utc) - timedelta(days=retention_days)
+    deleted_scans = 0
+    deleted_s3_files = 0
+
+    async def _do_purge(session):
+        nonlocal deleted_scans, deleted_s3_files
+        query = select(ScanHistory).where(ScanHistory.created_at < cutoff_date)
+        result = await session.execute(query)
+        expired_scans = result.scalars().all()
+
+        if not expired_scans:
+            logger.info(f"[GDPR Purge] No scans found older than {retention_days} days.")
+            return {
+                "status": "completed",
+                "scans_purged": 0,
+                "s3_files_purged": 0,
+                "cutoff_date": cutoff_date.isoformat(),
+                "retention_days": retention_days,
+            }
+
+        s3_keys_to_purge = []
+        scan_ids_to_purge = []
+
+        for scan in expired_scans:
+            scan_ids_to_purge.append(scan.id)
+            report_data = scan.report_json if isinstance(scan.report_json, dict) else {}
+            if "s3_key" in report_data:
+                s3_keys_to_purge.append(report_data["s3_key"])
+            if "file_path" in report_data:
+                s3_keys_to_purge.append(report_data["file_path"])
+            s3_keys_to_purge.append(f"scans/{scan.user_id}/{scan.id}.pdf")
+            s3_keys_to_purge.append(f"documents/{scan.user_id}/{scan.filename}")
+
+        if s3_keys_to_purge:
+            deleted_s3_files = StorageService.delete_files(s3_keys_to_purge)
+
+        del_query = delete(ScanHistory).where(ScanHistory.id.in_(scan_ids_to_purge))
+        del_result = await session.execute(del_query)
+        await session.commit()
+        deleted_scans = del_result.rowcount or len(scan_ids_to_purge)
+
+        logger.info(
+            f"[GDPR Purge Completed] Purged {deleted_scans} expired scans and "
+            f"{deleted_s3_files} S3 files older than {retention_days} days."
+        )
+
+        return {
+            "status": "completed",
+            "scans_purged": deleted_scans,
+            "s3_files_purged": deleted_s3_files,
+            "cutoff_date": cutoff_date.isoformat(),
+            "retention_days": retention_days,
+        }
+
+    if db_session is not None:
+        return await _do_purge(db_session)
+    else:
+        async with AsyncSessionLocal() as session:
+            return await _do_purge(session)
+
+
+@celery_app.task(name="purge_expired_data_retention_records")
+def purge_expired_data_retention_records(retention_days: int = 30) -> Dict[str, Any]:
+    """
+    Scheduled Celery Beat task: Automated GDPR & CCPA Data Retention Purge.
+    Runs daily to permanently delete all scan records and associated S3 documents
+    older than the retention period (default: 30 days).
+    """
+    logger.info(f"[GDPR Purge] Commencing scheduled data retention cleanup (Threshold: {retention_days} days)...")
+    return _run_coroutine(execute_data_retention_purge(retention_days=retention_days))
