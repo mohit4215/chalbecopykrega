@@ -175,11 +175,19 @@ class InternalVectorDB:
     COLLECTION_NAME = "student_submissions"
     VECTOR_DIM = 384
 
-    def __init__(self, location: str = ":memory:", model_name: str = "sentence-transformers/all-MiniLM-L6-v2"):
+    def __init__(
+        self,
+        location: Optional[str] = ":memory:",
+        qdrant_url: Optional[str] = None,
+        model_name: str = "sentence-transformers/all-MiniLM-L6-v2",
+        **kwargs
+    ):
         self.location = location
+        self.qdrant_url = qdrant_url
         self.model_name = model_name
         self._model = None
         self._qdrant_client = None
+        self._fallback_store = []
 
         self._init_qdrant()
 
@@ -202,7 +210,10 @@ class InternalVectorDB:
             from qdrant_client import QdrantClient
             from qdrant_client.models import Distance, VectorParams
 
-            self._qdrant_client = QdrantClient(location=self.location)
+            if self.qdrant_url:
+                self._qdrant_client = QdrantClient(url=self.qdrant_url)
+            else:
+                self._qdrant_client = QdrantClient(location=self.location or ":memory:")
             
             # Create collection if it doesn't already exist
             collections = [c.name for c in self._qdrant_client.get_collections().collections]
@@ -212,8 +223,8 @@ class InternalVectorDB:
                     vectors_config=VectorParams(size=self.VECTOR_DIM, distance=Distance.COSINE)
                 )
                 logger.info(f"Initialized Qdrant collection '{self.COLLECTION_NAME}' (Cosine, dim={self.VECTOR_DIM}).")
-        except ImportError:
-            logger.warning("qdrant-client not installed. Running in-memory dictionary fallback mode.")
+        except Exception as e:
+            logger.warning(f"Qdrant client initialization fallback: {e}. Running in-memory dictionary fallback mode.")
             self._qdrant_client = "in_memory_dict"
             self._fallback_store = []
 

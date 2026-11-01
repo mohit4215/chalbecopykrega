@@ -13,11 +13,14 @@ export default function LoginForm({ onSwitchToRegister, onSuccess }) {
     e.preventDefault();
     setError('');
     setLoading(true);
+    console.log('[LoginForm] Submitting credentials for:', email);
 
     try {
-      await login(email, password);
+      const loggedInUser = await login(email, password);
+      console.log('[LoginForm] Login succeeded for user:', loggedInUser?.email);
       if (onSuccess) onSuccess();
     } catch (err) {
+      console.error('[LoginForm] Login failure caught:', err.message);
       setError(err.message || 'Login failed. Please check your credentials.');
     } finally {
       setLoading(false);

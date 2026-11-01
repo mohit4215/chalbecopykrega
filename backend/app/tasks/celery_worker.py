@@ -44,18 +44,26 @@ celery_app.conf.update(
 )
 
 # Shared worker singletons
-_ingestion_pipeline = DocumentExtractionPipeline(chunk_size=50, chunk_overlap=20, enable_ocr=True)
-_vector_db = InternalVectorDB(
-    qdrant_url=os.getenv("QDRANT_URL") if os.getenv("QDRANT_URL") else None,
-    location=":memory:" if not os.getenv("QDRANT_URL") else None
-)
-_web_client = LiveWebSearchClient()
-_nlp_matcher = CoreNLPMatcher()
-_plagiarism_engine = PlagiarismDetectionEngine(
-    vector_db=_vector_db,
-    web_client=_web_client,
-    matcher=_nlp_matcher
-)
+try:
+    _ingestion_pipeline = DocumentExtractionPipeline(chunk_size=50, chunk_overlap=20, enable_ocr=True)
+    _vector_db = InternalVectorDB(
+        qdrant_url=os.getenv("QDRANT_URL") if os.getenv("QDRANT_URL") else None,
+        location=":memory:" if not os.getenv("QDRANT_URL") else None
+    )
+    _web_client = LiveWebSearchClient()
+    _nlp_matcher = CoreNLPMatcher()
+    _plagiarism_engine = PlagiarismDetectionEngine(
+        vector_db=_vector_db,
+        web_client=_web_client,
+        matcher=_nlp_matcher
+    )
+except Exception as e:
+    logger.warning(f"Celery worker singleton setup deferred: {e}")
+    _ingestion_pipeline = None
+    _vector_db = None
+    _web_client = None
+    _nlp_matcher = None
+    _plagiarism_engine = None
 
 
 @celery_app.task(bind=True, name="process_plagiarism_document")
