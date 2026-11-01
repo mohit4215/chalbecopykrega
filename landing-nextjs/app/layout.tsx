@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import './globals.css';
 import CookieConsent from '../components/CookieConsent';
 import AnalyticsTracker from '../components/AnalyticsTracker';
+import SupportChatWidget from '../components/SupportChatWidget';
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://chalbecopykrega-app.onrender.com'),
@@ -120,6 +121,9 @@ export default function RootLayout({
 
         {/* GDPR-compliant Cookie Consent Banner */}
         <CookieConsent />
+
+        {/* Third-Party Customer Support & Inquiry Widget */}
+        <SupportChatWidget />
       </body>
     </html>
   );

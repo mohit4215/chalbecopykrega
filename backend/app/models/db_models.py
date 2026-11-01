@@ -30,6 +30,7 @@ class User(Base):
 
     # Relationships
     scans = relationship("ScanHistory", back_populates="user", cascade="all, delete-orphan", order_by="desc(ScanHistory.created_at)")
+    feedbacks = relationship("Feedback", back_populates="user", cascade="all, delete-orphan", order_by="desc(Feedback.created_at)")
 
     @property
     def has_active_subscription(self) -> bool:
@@ -77,5 +78,48 @@ class ScanHistory(Base):
             "user_id": self.user_id,
             "filename": self.filename,
             "overall_score": round(self.overall_score, 2),
+            "created_at": self.created_at.isoformat() if self.created_at else None
+        }
+
+class Feedback(Base):
+    """
+    Audit log of false-positive reports, citation anomalies, and engine tuning requests.
+    Enables machine learning engineers and product managers to audit and calibrate
+    similarity thresholds, winnowing parameters, and quotation filtering.
+    """
+    __tablename__ = "feedback"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True)
+    scan_id = Column(String(255), nullable=True, index=True)
+    filename = Column(String(255), nullable=True)
+    chunk_text = Column(Text, nullable=False)
+    matched_source_url = Column(String(1024), nullable=True)
+    source_title = Column(String(255), nullable=True)
+    similarity_score = Column(Float, nullable=True)
+    reason = Column(String(100), default="false_positive", nullable=False)  # e.g., 'false_positive', 'common_phrase', 'quotation_missed', 'public_domain', 'other'
+    comment = Column(Text, nullable=True)
+    status = Column(String(50), default="pending", nullable=False, index=True)  # 'pending', 'reviewed', 'resolved', 'dismissed'
+    admin_notes = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=func.now(), nullable=False, index=True)
+
+    # Relationships
+    user = relationship("User", back_populates="feedbacks")
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "user_email": self.user.email if self.user else None,
+            "scan_id": self.scan_id,
+            "filename": self.filename,
+            "chunk_text": self.chunk_text,
+            "matched_source_url": self.matched_source_url,
+            "source_title": self.source_title,
+            "similarity_score": round(self.similarity_score, 4) if self.similarity_score is not None else None,
+            "reason": self.reason,
+            "comment": self.comment,
+            "status": self.status,
+            "admin_notes": self.admin_notes,
             "created_at": self.created_at.isoformat() if self.created_at else None
         }

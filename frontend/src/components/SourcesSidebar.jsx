@@ -1,11 +1,12 @@
 import React from 'react';
-import { Globe, Layers, ExternalLink, ChevronRight, CheckCircle2 } from 'lucide-react';
+import { Globe, Layers, ExternalLink, ChevronRight, CheckCircle2, Flag } from 'lucide-react';
 
 export default function SourcesSidebar({ 
   matches = [], 
   selectedMatchId, 
   onSelectMatch, 
-  onOpenDiff 
+  onOpenDiff,
+  onFlagMatch
 }) {
   const getTypeBadge = (type) => {
     if (type === 'exact_copy') {
@@ -113,20 +114,37 @@ export default function SourcesSidebar({
                 "{m.matched_text}"
               </p>
 
-              {/* Footer row: index coordinates & diff inspection */}
+              {/* Footer row: index coordinates, flag action & diff inspection */}
               <div className="flex items-center justify-between mt-2.5 pt-2 border-t border-slate-100 text-[11px] text-slate-400">
                 <span>Indices: [{m.start_index} - {m.end_index}]</span>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onSelectMatch(m);
-                    onOpenDiff(m);
-                  }}
-                  className="text-indigo-600 hover:text-indigo-800 font-bold flex items-center gap-0.5"
-                >
-                  Compare Diff <ChevronRight className="w-3 h-3" />
-                </button>
+                <div className="flex items-center gap-2.5">
+                  {onFlagMatch && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onSelectMatch(m);
+                        onFlagMatch(m);
+                      }}
+                      className="text-amber-600 hover:text-amber-800 font-bold flex items-center gap-1 hover:underline"
+                      title="Flag as False Positive"
+                    >
+                      <Flag className="w-3 h-3" />
+                      <span>Flag</span>
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onSelectMatch(m);
+                      onOpenDiff(m);
+                    }}
+                    className="text-indigo-600 hover:text-indigo-800 font-bold flex items-center gap-0.5"
+                  >
+                    Compare Diff <ChevronRight className="w-3 h-3" />
+                  </button>
+                </div>
               </div>
             </div>
           );

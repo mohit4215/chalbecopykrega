@@ -3,6 +3,7 @@ import {
   ShieldAlert, 
   BarChart3, 
   Users, 
+  Flag,
   ArrowLeft, 
   AlertTriangle,
   Lock
@@ -10,6 +11,7 @@ import {
 import { useAuth } from '../../context/AuthContext';
 import AdminOverview from './AdminOverview';
 import AdminUserManagement from './AdminUserManagement';
+import AdminFeedbackReview from './AdminFeedbackReview';
 
 export default function AdminDashboard({ onExitAdmin }) {
   const { user, authFetch } = useAuth();
@@ -113,6 +115,19 @@ export default function AdminDashboard({ onExitAdmin }) {
               <Users className="w-3.5 h-3.5" />
               <span>User Directory</span>
             </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('feedback')}
+              className={`px-3.5 py-1.5 text-xs font-bold rounded-xl flex items-center gap-1.5 transition ${
+                activeTab === 'feedback'
+                  ? 'bg-indigo-600 text-white shadow-sm'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <Flag className="w-3.5 h-3.5" />
+              <span>NLP Feedback Queue</span>
+            </button>
           </div>
 
           <button
@@ -140,8 +155,10 @@ export default function AdminDashboard({ onExitAdmin }) {
           onRefresh={fetchStats}
           loading={loading}
         />
-      ) : (
+      ) : activeTab === 'users' ? (
         <AdminUserManagement />
+      ) : (
+        <AdminFeedbackReview />
       )}
     </div>
   );

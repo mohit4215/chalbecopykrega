@@ -1,7 +1,7 @@
 import React from 'react';
-import { X, ExternalLink, GitCompare } from 'lucide-react';
+import { X, ExternalLink, GitCompare, Flag } from 'lucide-react';
 
-export default function DiffModal({ match, isOpen, onClose }) {
+export default function DiffModal({ match, isOpen, onClose, onFlagMatch }) {
   if (!isOpen || !match) return null;
 
   return (
@@ -51,9 +51,21 @@ export default function DiffModal({ match, isOpen, onClose }) {
               <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
                 Matched Reference Source
               </span>
-              <span className="text-xs px-2.5 py-0.5 rounded-full bg-indigo-100 text-indigo-700 font-extrabold">
-                {(match.similarity_score * 100).toFixed(0)}% Similarity
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-xs px-2.5 py-0.5 rounded-full bg-indigo-100 text-indigo-700 font-extrabold">
+                  {(match.similarity_score * 100).toFixed(0)}% Similarity
+                </span>
+                {onFlagMatch && (
+                  <button
+                    type="button"
+                    onClick={() => onFlagMatch(match)}
+                    className="p-1 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition"
+                    title="Flag as False Positive / Incorrect"
+                  >
+                    <Flag className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
             </div>
             <div className="flex-1 bg-blue-50/60 border border-blue-100 p-4 rounded-xl text-slate-800 text-sm font-serif leading-relaxed">
               {match.source_snippet || match.matched_text}
@@ -66,7 +78,18 @@ export default function DiffModal({ match, isOpen, onClose }) {
           <div className="text-xs text-slate-500">
             Classification: <strong className="uppercase">{match.match_type.replace('_', ' ')}</strong>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5">
+            {onFlagMatch && (
+              <button
+                type="button"
+                onClick={() => onFlagMatch(match)}
+                className="px-3.5 py-2 bg-amber-50 hover:bg-amber-100 text-amber-700 font-bold rounded-xl text-xs flex items-center gap-1.5 transition border border-amber-200 shadow-sm"
+                title="Flag this match as false positive or incorrect citation"
+              >
+                <Flag className="w-3.5 h-3.5" />
+                <span>Flag as Incorrect</span>
+              </button>
+            )}
             {match.source_url && (
               <a
                 href={match.source_url}
