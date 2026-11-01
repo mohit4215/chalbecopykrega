@@ -21,15 +21,25 @@ export default function SupportChatWidget() {
   const [submitSuccess, setSubmitSuccess] = useState(false);
   const [submitError, setSubmitError] = useState(null);
 
-  const crispWebsiteId = import.meta.env.VITE_CRISP_WEBSITE_ID || '14917415-38b8-4d51-897c-9da57d904791';
+  const rawCrispId = (import.meta.env.VITE_CRISP_WEBSITE_ID || '').trim();
+  // Only activate Crisp script if a legitimate, non-mock external website ID is configured
+  const isValidCrispId = Boolean(
+    rawCrispId &&
+    rawCrispId !== '14917415-38b8-4d51-897c-9da57d904791' &&
+    rawCrispId !== 'placeholder' &&
+    !rawCrispId.startsWith('mock')
+  );
 
-  // 1. Initialize Crisp Script on Mount
+  // 1. Initialize Crisp Script on Mount (only if valid website ID provided)
   useEffect(() => {
-    if (typeof window === 'undefined') return;
+    if (typeof window === 'undefined' || !isValidCrispId) {
+      setCrispLoaded(false);
+      return;
+    }
 
     if (!window.$crisp) {
       window.$crisp = [];
-      window.CRISP_WEBSITE_ID = crispWebsiteId;
+      window.CRISP_WEBSITE_ID = rawCrispId;
 
       const script = document.createElement('script');
       script.src = 'https://client.crisp.chat/l.js';
@@ -40,7 +50,7 @@ export default function SupportChatWidget() {
       };
 
       script.onerror = () => {
-        console.warn('[SupportWidget] External chat script could not be loaded (likely ad-blocker or offline). Fallback UI enabled.');
+        console.warn('[SupportWidget] External chat script could not be loaded. Fallback UI enabled.');
         setCrispLoaded(false);
       };
 
@@ -48,7 +58,7 @@ export default function SupportChatWidget() {
     } else {
       setCrispLoaded(true);
     }
-  }, [crispWebsiteId]);
+  }, [isValidCrispId, rawCrispId]);
 
   // 2. Synchronize Authenticated User Identity
   useEffect(() => {

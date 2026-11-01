@@ -48,7 +48,7 @@ const STAGES = [
 ];
 
 export default function UploadComponent({ onScanComplete, isLoading, setIsLoading, onNeedLogin }) {
-  const { token, authFetch } = useAuth();
+  const { token, authFetch, loginAsDemo } = useAuth();
   const [file, setFile] = useState(null);
   const [enableWeb, setEnableWeb] = useState(true);
   const [errorMessage, setErrorMessage] = useState('');
@@ -215,17 +215,26 @@ export default function UploadComponent({ onScanComplete, isLoading, setIsLoadin
       return;
     }
 
-    if (!token) {
-      if (onNeedLogin) {
-        onNeedLogin();
-      } else {
-        setErrorMessage('Please sign in or create a free account to scan documents.');
-      }
-      return;
-    }
-
     setIsLoading(true);
     setErrorMessage('');
+    setTaskProgress(5);
+
+    // If unauthenticated, auto-authenticate with pre-seeded demo account or prompt login
+    if (!token) {
+      try {
+        setStatusMessage('Initializing demo scan session (25 free Pro credits)...');
+        await loginAsDemo();
+      } catch (authErr) {
+        setIsLoading(false);
+        if (onNeedLogin) {
+          onNeedLogin();
+        } else {
+          setErrorMessage('Please sign in or create an account to start scanning.');
+        }
+        return;
+      }
+    }
+
     setTaskProgress(10);
     setStatusMessage('Uploading document and validating MIME signatures...');
 
@@ -248,6 +257,9 @@ export default function UploadComponent({ onScanComplete, isLoading, setIsLoadin
       });
 
       if (!response.ok) {
+        if (response.status === 401) {
+          throw new Error('Your session has expired. Please sign in or use the demo account to scan.');
+        }
         const errData = await response.json().catch(() => ({}));
         throw new Error(errData.detail || `Upload failed with status: ${response.status}`);
       }
@@ -297,20 +309,36 @@ export default function UploadComponent({ onScanComplete, isLoading, setIsLoadin
       </div>
 
       {!token && !isLoading && (
-        <div className="mt-4 p-3 bg-gradient-to-r from-indigo-50/80 to-purple-50/80 dark:from-indigo-950/40 dark:to-purple-950/40 border border-indigo-100 dark:border-indigo-800/60 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+        <div className="mt-4 p-3.5 bg-gradient-to-r from-indigo-50/90 to-purple-50/90 dark:from-indigo-950/40 dark:to-purple-950/40 border border-indigo-200/80 dark:border-indigo-800/60 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
           <div className="flex items-center gap-2 text-indigo-900 dark:text-indigo-200">
             <Sparkles className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
-            <span>Sign in or register to get <strong>3 free AI & Web Plagiarism checks</strong> with full source matches.</span>
+            <span>Ready to test? Drop a paper or scan with <strong>25 Free Pro Credits</strong>.</span>
           </div>
-          {onNeedLogin && (
+          <div className="flex items-center gap-2 shrink-0">
             <Button
               size="sm"
-              onClick={onNeedLogin}
-              className="shrink-0 h-7 text-xs font-bold shadow-sm"
+              variant="outline"
+              onClick={async () => {
+                try {
+                  await loginAsDemo();
+                } catch {
+                  if (onNeedLogin) onNeedLogin();
+                }
+              }}
+              className="h-7 text-xs font-bold border-indigo-300 text-indigo-700 dark:text-indigo-300 bg-white/60 dark:bg-slate-900/60"
             >
-              Sign In to Scan
+              1-Click Demo Login
             </Button>
-          )}
+            {onNeedLogin && (
+              <Button
+                size="sm"
+                onClick={onNeedLogin}
+                className="h-7 text-xs font-bold shadow-sm"
+              >
+                Sign In
+              </Button>
+            )}
+          </div>
         </div>
       )}
 
