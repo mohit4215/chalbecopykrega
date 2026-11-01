@@ -7,7 +7,7 @@ import math
 import logging
 from typing import Optional, List, Dict, Any
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Depends, Request, Header, Query, status, BackgroundTasks, WebSocket, WebSocketDisconnect
-from fastapi.responses import StreamingResponse, Response
+from fastapi.responses import StreamingResponse, Response, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime, timezone, timedelta
 from pydantic import BaseModel, EmailStr, Field
@@ -1420,8 +1420,16 @@ if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8000))
     uvicorn.run("app.main:app", host="0.0.0.0", port=port, reload=False)
 
-# Static files mount
+# Static files mount & root redirect fallback
 static_dist_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../frontend/dist"))
 if os.path.isdir(static_dist_path):
     from fastapi.staticfiles import StaticFiles
     app.mount("/", StaticFiles(directory=static_dist_path, html=True), name="static")
+else:
+    @app.get("/", include_in_schema=False)
+    async def root_redirect():
+        """
+        When the frontend is deployed as a standalone static web app on Render,
+        visiting the root of the API server automatically redirects to the frontend.
+        """
+        return RedirectResponse(url="https://chalbecopykrega-app.onrender.com", status_code=302)

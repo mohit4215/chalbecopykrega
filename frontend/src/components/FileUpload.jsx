@@ -74,9 +74,11 @@ export default function FileUpload({ onScanComplete, isLoading, setIsLoading }) 
       formData.append('exclude_bibliography', excludeBib ? 'true' : 'false');
       formData.append('enable_web_search', enableWeb ? 'true' : 'false');
 
-      const apiEndpoint = import.meta.env.VITE_API_URL 
-        ? `${import.meta.env.VITE_API_URL.replace(/\/+$/, '')}/api/scan`
-        : '/api/scan';
+      const rawApi = (import.meta.env.VITE_API_URL || 'https://chalbecopykrega-api.onrender.com').trim();
+      const cleanBase = (rawApi.startsWith('http://') || rawApi.startsWith('https://'))
+        ? rawApi.replace(/\/+$/, '')
+        : `https://${rawApi}`.replace(/\/+$/, '');
+      const apiEndpoint = `${cleanBase}/api/scan`;
 
       const response = await fetch(apiEndpoint, {
         method: 'POST',

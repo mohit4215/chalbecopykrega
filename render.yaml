@@ -44,14 +44,12 @@ services:
     runtime: static
     region: oregon
     plan: free
+    autoDeploy: true
     buildCommand: "cd frontend && npm install && npm run build"
     staticPublishPath: "./frontend/dist"
     envVars:
       - key: VITE_API_URL
-        fromService:
-          type: web
-          name: chalbecopykrega-api
-          property: host
+        value: "https://chalbecopykrega-api.onrender.com"
     routes:
       - type: rewrite
         source: /*
