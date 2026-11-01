@@ -19,10 +19,11 @@ pymupdf>=1.23.0
 python-docx>=1.1.0
 pillow>=10.2.0
 
-# Numerics & lightweight embeddings (HashingVectorizer)
+# Numerics & lightweight embeddings (HashingVectorizer & ONNX Runtime)
 numpy>=1.26.0
 scikit-learn>=1.4.0
 datasketch>=1.6.4
+onnxruntime>=1.17.0
 
 # HTTP / scraping
 requests>=2.31.0

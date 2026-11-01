@@ -24,8 +24,16 @@ class SemanticMatcher:
 
     @property
     def model(self):
-        """Lazy load HuggingFace model upon first inference."""
+        """Lazy load HuggingFace model or ONNX Engine upon first inference."""
         if self._model is None:
+            try:
+                from app.services.embedding_service import get_embedding_service
+                svc = get_embedding_service()
+                if svc.backend_type in ("onnx", "sentence-transformers"):
+                    self._model = svc
+                    return self._model
+            except Exception:
+                pass
             try:
                 from sentence_transformers import SentenceTransformer
                 self._model = SentenceTransformer(self.model_name)
@@ -80,8 +88,12 @@ class SemanticMatcher:
             return np.empty((0, 384))
 
         if self.model != "fallback":
-            embeddings = self.model.encode(texts, convert_to_numpy=True, normalize_embeddings=True)
-            return embeddings
+            try:
+                from app.services.embedding_service import get_embedding_service
+                return get_embedding_service().encode(texts)
+            except Exception:
+                embeddings = self.model.encode(texts, convert_to_numpy=True, normalize_embeddings=True)
+                return embeddings
         else:
             # Fallback TF-IDF cosine representation if SentenceTransformers model is unavailable
             from sklearn.feature_extraction.text import TfidfVectorizer
