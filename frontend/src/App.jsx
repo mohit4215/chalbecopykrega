@@ -26,6 +26,7 @@ import BillingDashboard from './components/BillingDashboard';
 import LoginForm from './components/LoginForm';
 import RegisterForm from './components/RegisterForm';
 import AdminDashboard from './components/admin/AdminDashboard';
+import CookieConsent from './components/CookieConsent';
 
 function MainApp() {
   const { user, isAuthenticated, logout, updateUserCredits, refreshUser, authFetch } = useAuth();
@@ -461,6 +462,7 @@ export default function App() {
   return (
     <AuthProvider>
       <MainApp />
+      <CookieConsent />
     </AuthProvider>
   );
 }
