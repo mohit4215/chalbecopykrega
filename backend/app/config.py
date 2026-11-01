@@ -17,6 +17,14 @@ class Settings(BaseSettings):
     # NLP & Embedding Model
     EMBEDDING_MODEL_NAME: str = "sentence-transformers/all-MiniLM-L6-v2"
     DEVICE: str = "cpu"  # "cuda" if GPU is available
+
+    # MLOps & Production Inference Optimization (ONNX Runtime + Process-Wide Caching)
+    ONNX_MODEL_PATH: str = os.getenv("ONNX_MODEL_PATH", "models/all-MiniLM-L6-v2.onnx")
+    ONNX_QUANTIZED_PATH: str = os.getenv("ONNX_QUANTIZED_PATH", "models/all-MiniLM-L6-v2-quantized.onnx")
+    ONNX_INTRA_THREADS: int = int(os.getenv("ONNX_INTRA_THREADS", "4"))
+    ENABLE_ONNX_EMBEDDINGS: bool = os.getenv("ENABLE_ONNX_EMBEDDINGS", "true").lower() in ("true", "1", "yes")
+    EMBEDDING_CACHE_SIZE: int = int(os.getenv("EMBEDDING_CACHE_SIZE", "50000"))
+    ENABLE_REDIS_EMBEDDING_CACHE: bool = os.getenv("ENABLE_REDIS_EMBEDDING_CACHE", "true").lower() in ("true", "1", "yes")
     
     # Winnowing Parameters (Exact Match Substring Fingerprinting)
     WINNOWING_K: int = 35       # K-gram character length

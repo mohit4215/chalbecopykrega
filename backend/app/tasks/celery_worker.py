@@ -199,6 +199,12 @@ try:
         web_client=_web_client,
         matcher=_nlp_matcher
     )
+    # Pre-heat the process-wide embedding model singleton
+    try:
+        from app.services.embedding_service import get_embedding_service
+        get_embedding_service().warmup()
+    except Exception as _warmup_err:
+        logger.debug(f"Celery worker embedding warmup skipped: {_warmup_err}")
 except Exception as e:
     logger.warning(f"Celery worker singleton setup deferred: {e}")
     _ingestion_pipeline = None
@@ -206,6 +212,21 @@ except Exception as e:
     _web_client = None
     _nlp_matcher = None
     _plagiarism_engine = None
+
+
+try:
+    from celery.signals import worker_process_init
+
+    @worker_process_init.connect
+    def on_worker_process_init(**kwargs):
+        """Pre-warm embedding model singleton in forked worker child processes."""
+        try:
+            from app.services.embedding_service import get_embedding_service
+            get_embedding_service().warmup()
+        except Exception as exc:
+            logger.debug(f"Forked worker process embedding warmup skipped: {exc}")
+except Exception:
+    pass
 
 
 @celery_app.task(bind=True, name="process_plagiarism_document")

@@ -228,8 +228,16 @@ class InternalVectorDB:
 
     @property
     def model(self):
-        """Lazy load HuggingFace SentenceTransformer."""
+        """Lazy load embedding backend (ONNX Engine, SentenceTransformer, or Fallback)."""
         if self._model is None:
+            try:
+                from app.services.embedding_service import get_embedding_service
+                svc = get_embedding_service()
+                if svc.backend_type in ("onnx", "sentence-transformers"):
+                    self._model = svc
+                    return self._model
+            except Exception:
+                pass
             logger.info(f"Loading SentenceTransformer model: {self.model_name}...")
             try:
                 from sentence_transformers import SentenceTransformer
@@ -269,7 +277,11 @@ class InternalVectorDB:
             return np.empty((0, self.VECTOR_DIM))
 
         if self.model != "fallback":
-            return self.model.encode(texts, convert_to_numpy=True, normalize_embeddings=True)
+            try:
+                from app.services.embedding_service import get_embedding_service
+                return get_embedding_service().encode(texts)
+            except Exception:
+                return self.model.encode(texts, convert_to_numpy=True, normalize_embeddings=True)
 
         return self._hashed_embeddings(texts)
 
