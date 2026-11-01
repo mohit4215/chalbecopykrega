@@ -227,7 +227,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         )
 
         # 8. Mask Server Implementation Banner
-        response.headers["Server"] = "OriginalityGuard-Gateway/1.0"
+        response.headers["Server"] = "Poach-Gateway/1.0"
 
         return response
 

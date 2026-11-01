@@ -83,7 +83,7 @@ function MainApp() {
       const link = document.createElement('a');
       link.href = downloadUrl;
       const safeTitle = (report.document_title || 'Document').replace(/[^a-zA-Z0-9_-]/g, '_');
-      link.download = `Originality_Report_${safeTitle}.pdf`;
+      link.download = `Poach_Originality_Report_${safeTitle}.pdf`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -112,7 +112,7 @@ function MainApp() {
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="text-base font-extrabold text-slate-900 leading-none">OriginalityGuard</h1>
+                <h1 className="text-base font-extrabold text-slate-900 leading-none tracking-tight">Poach</h1>
                 <span className="px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider bg-indigo-50 text-indigo-700 border border-indigo-200">
                   Stripe SaaS
                 </span>

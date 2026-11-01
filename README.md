@@ -1,4 +1,4 @@
-# Turnitin-Style Academic Plagiarism Detection Engine
+# Poach | Academic Plagiarism & Originality Detection Engine
 
 [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/mohit4215/chalbecopykrega)
 
