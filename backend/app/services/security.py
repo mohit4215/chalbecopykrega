@@ -229,6 +229,27 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         # 8. Mask Server Implementation Banner
         response.headers["Server"] = "Poach-Gateway/1.0"
 
+        # 9. Cloudflare Edge Caching & Cache-Control Directives
+        path = request.url.path
+        if request.method == "GET":
+            # Public static / immutable endpoints eligible for Cloudflare CDN edge caching
+            if path in ("/api/billing/plans", "/api/health") or path.startswith("/assets/"):
+                response.headers["Cache-Control"] = "public, max-age=3600, s-maxage=86400, stale-while-revalidate=600"
+                response.headers["Cloudflare-CDN-Cache-Control"] = "max-age=86400"
+                response.headers["CDN-Cache-Control"] = "max-age=86400"
+            elif path.startswith("/api/export-report/") or path.startswith("/api/task-status/"):
+                # Private dynamic reports and background jobs: never cache at edge
+                response.headers["Cache-Control"] = "private, no-cache, no-store, must-revalidate"
+                response.headers["Pragma"] = "no-cache"
+            elif "Cache-Control" not in response.headers:
+                # Default private API response
+                response.headers["Cache-Control"] = "private, no-cache, no-store, must-revalidate"
+                response.headers["Pragma"] = "no-cache"
+        else:
+            # Mutating POST/PUT/DELETE requests should never be cached at the CDN edge
+            response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+            response.headers["Pragma"] = "no-cache"
+
         return response
 
 

@@ -484,6 +484,13 @@ async def get_available_plans():
     """Returns available pricing plans and credit top-up packages."""
     return PLANS
 
+@app.get("/api/search-cache/stats")
+async def get_search_cache_stats():
+    """Returns 24-hour Redis query cache telemetry and hit ratio."""
+    from app.services.web_cache import get_web_search_cache
+    cache = get_web_search_cache()
+    return cache.get_stats()
+
 @app.post("/api/create-checkout-session", response_model=CheckoutSessionResponse)
 async def create_checkout_session(
     payload: CheckoutSessionRequest,

@@ -164,8 +164,20 @@ class LiveWebSearchClient:
 
     async def query_web_for_chunk(self, chunk_text: str, top_k: int = 3) -> List[Dict[str, str]]:
         """
-        Orchestrates exact and semantic queries across configured search providers.
+        Orchestrates exact and semantic queries across configured search providers with
+        Redis 24-hour caching to eliminate redundant external SERP API fees.
         """
+        # 1. Check Redis 24-Hour Cache for identical queries
+        cache = None
+        try:
+            from app.services.web_cache import get_web_search_cache
+            cache = get_web_search_cache()
+            cached_results = await cache.get_async(chunk_text)
+            if cached_results is not None:
+                return cached_results
+        except Exception as cache_err:
+            logger.debug(f"Web query cache lookup skipped: {cache_err}")
+
         queries = self.construct_queries(chunk_text)
         exact_q = queries["exact_query"]
         semantic_q = queries["semantic_query"]
@@ -184,6 +196,13 @@ class LiveWebSearchClient:
         else:
             # Open fallback
             results = await self.search_fallback_open(semantic_q, top_k=top_k)
+
+        # 2. Store newly retrieved results in Redis 24-Hour Cache
+        if results and cache is not None:
+            try:
+                await cache.set_async(chunk_text, results)
+            except Exception as store_err:
+                logger.debug(f"Failed to save SERP results to cache: {store_err}")
 
         return results
 
