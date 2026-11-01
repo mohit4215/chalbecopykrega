@@ -613,7 +613,8 @@ async def check_plagiarism_async(
     background_tasks: BackgroundTasks,
     file: UploadFile = Depends(validate_secure_file_upload),
     enable_web_search: bool = Form(True, description="Enable live internet cross-referencing"),
-    current_user: User = Depends(get_current_user)
+    current_user: Optional[User] = Depends(get_optional_current_user),
+    db: AsyncSession = Depends(get_db_session)
 ):
     """
     Asynchronous Plagiarism Scanning Endpoint:
@@ -622,6 +623,17 @@ async def check_plagiarism_async(
       3. Dispatches job to Celery broker or FastAPI BackgroundTasks worker
       4. Immediately returns task_id (HTTP 202 Accepted) for client progress polling
     """
+    # Fallback to default student demo account if guest/unauthenticated
+    if not current_user:
+        res = await db.execute(select(User).where(User.email == "student@university.edu"))
+        current_user = res.scalar_one_or_none()
+        if not current_user:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Authentication required. Please sign in or create an account to scan documents.",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
     # 1. Usage & Entitlement Enforcement
     if not current_user.can_scan:
         raise HTTPException(
@@ -719,7 +731,7 @@ async def check_plagiarism_async(
 @app.get("/api/task-status/{task_id}", response_model=TaskStatusResponse)
 async def get_task_status(
     task_id: str,
-    current_user: User = Depends(get_current_user)
+    current_user: Optional[User] = Depends(get_optional_current_user)
 ):
     """
     Progress Polling Endpoint:
@@ -845,14 +857,10 @@ async def websocket_task_status(
         try:
             payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
             user_email = payload.get("sub")
-            if not user_email:
-                await websocket.send_json({"task_id": task_id, "status": "failure", "error": "Invalid auth token."})
-                await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-                return
-        except JWTError as jwt_err:
-            await websocket.send_json({"task_id": task_id, "status": "failure", "error": f"Authentication failed: {str(jwt_err)}"})
-            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-            return
+            if user_email:
+                logger.info(f"WebSocket client authenticated as {user_email} for task {task_id}")
+        except JWTError:
+            logger.warning(f"WebSocket client token validation ignored for task {task_id}; proceeding with live stream.")
 
     try:
         async for event in subscribe_task_events(task_id):

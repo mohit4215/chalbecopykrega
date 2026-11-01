@@ -26,6 +26,25 @@ export function AuthProvider({ children }) {
     setLoading(false);
   }, [token, user]);
 
+  // Validate stored session on boot
+  useEffect(() => {
+    if (token) {
+      authFetch('/api/me')
+        .then(async (res) => {
+          if (res.status === 401 || res.status === 403) {
+            console.warn('[Auth] Stored JWT session is invalid or expired. Auto-logging out.');
+            logout();
+          } else if (res.ok) {
+            const freshUser = await res.json();
+            setUser(freshUser);
+          }
+        })
+        .catch(() => {
+          // Network offline / slow connection
+        });
+    }
+  }, []);
+
   const apiBase = (() => {
     let raw = (import.meta.env.VITE_API_URL || 'https://chalbecopykrega-api.onrender.com').trim();
     if (!raw.startsWith('http://') && !raw.startsWith('https://')) {
@@ -102,13 +121,27 @@ export function AuthProvider({ children }) {
     const fullUrl = (url.startsWith('http://') || url.startsWith('https://'))
       ? url
       : `${apiBase}${cleanUrl}`;
-    return fetch(fullUrl, { ...options, headers });
+
+    const res = await fetch(fullUrl, { ...options, headers });
+    if (res.status === 401 && token) {
+      console.warn('[Auth] Server returned HTTP 401 Unauthorized. Clearing stale token.');
+      logout();
+    }
+    return res;
+  };
+
+  const loginAsDemo = async () => {
+    return login('student@university.edu', 'password123');
   };
 
   const refreshUser = async () => {
     if (!token) return;
     try {
       const res = await authFetch('/api/me');
+      if (res.status === 401) {
+        logout();
+        return null;
+      }
       if (res.ok) {
         const freshUser = await res.json();
         setUser(freshUser);
@@ -138,10 +171,11 @@ export function AuthProvider({ children }) {
       login, 
       register, 
       logout, 
+      loginAsDemo,
       authFetch, 
       refreshUser, 
       updateUserCredits, 
-      isAuthenticated: !!token 
+      isAuthenticated: Boolean(token && user)
     }}>
       {!loading && children}
     </AuthContext.Provider>
