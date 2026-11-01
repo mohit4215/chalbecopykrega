@@ -264,8 +264,10 @@ Notes for the free tier:
   copying and lexical overlap; install `backend/requirements-ml.txt` and set
   `USE_HASHED_EMBEDDINGS=false` for neural paraphrase detection.
 - To move to the full async architecture, provision Redis, set
-  `CELERY_ALWAYS_EAGER=false` plus `REDIS_URL`, and run a worker with
+  `REDIS_URL` and `CELERY_ALWAYS_EAGER=false`, then run a worker with
   `celery -A app.tasks.celery_worker.celery_app worker --loglevel=info`.
+  With no `REDIS_URL` configured the API automatically runs scans inline, so
+  the deployment needs no dashboard flags.
 
 ---
 
