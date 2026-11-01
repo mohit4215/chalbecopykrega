@@ -959,6 +959,11 @@ async def health_check():
         "stripe_configured": bool(os.getenv("STRIPE_SECRET_KEY"))
     }
 
+if __name__ == "__main__":
+    import uvicorn
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run("app.main:app", host="0.0.0.0", port=port, reload=False)
+
 # Static files mount
 static_dist_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../frontend/dist"))
 if os.path.isdir(static_dist_path):
