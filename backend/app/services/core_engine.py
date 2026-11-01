@@ -139,7 +139,7 @@ class LiveWebSearchClient:
         clean_q = query.replace('"', '')
         url = f"https://api.duckduckgo.com/?q={clean_q}&format=json"
         try:
-            async with httpx.AsyncClient(timeout=6.0) as client:
+            async with httpx.AsyncClient(timeout=2.5) as client:
                 resp = await client.get(url)
                 if resp.status_code == 200:
                     data = resp.json()
@@ -531,7 +531,20 @@ class PlagiarismDetectionEngine:
         """
         total_chunks = len(chunks)
         if total_chunks == 0:
-            return {"error": "Document contains no text chunks to scan."}
+            return {
+                "document_id": document_id,
+                "document_title": document_title,
+                "total_chunks_scanned": 0,
+                "plagiarized_chunks_count": 0,
+                "overall_plagiarism_percentage": 0.0,
+                "originality_percentage": 100.0,
+                "summary": {
+                    "exact_matches_count": 0,
+                    "paraphrase_matches_count": 0,
+                    "internet_matches_count": 0,
+                },
+                "matches": [],
+            }
 
         # 1. Compute dense embeddings for all uploaded chunks
         chunk_embeddings = self.vector_db.generate_embeddings(chunks)
@@ -540,6 +553,9 @@ class PlagiarismDetectionEngine:
         detailed_matches: List[Dict[str, Any]] = []
 
         # 2. Iterate and evaluate each chunk
+        max_web_queries = 5
+        web_queries_done = 0
+
         for chunk_idx, (chunk_text, chunk_vec) in enumerate(zip(chunks, chunk_embeddings)):
             chunk_matched = False
 
@@ -568,29 +584,34 @@ class PlagiarismDetectionEngine:
                     break  # Found high-confidence internal match for this chunk
 
             # --- Check Live Web Search (if enabled and not already an exact internal match) ---
-            if enable_web_search and not chunk_matched:
-                web_results = await self.web_client.query_web_for_chunk(chunk_text, top_k=2)
-                for web_res in web_results:
-                    snippet = web_res.get("snippet", "")
-                    if not snippet:
-                        continue
-                    snippet_vec = self.vector_db.generate_embeddings([snippet])[0]
-                    eval_result = self.matcher.evaluate_match(
-                        chunk_text=chunk_text,
-                        chunk_vector=chunk_vec,
-                        candidate_text=snippet,
-                        candidate_vector=snippet_vec,
-                        source_metadata={
-                            "source_title": web_res.get("title", "Internet Web Page"),
-                            "source_url": web_res.get("url"),
-                            "source_category": "Internet Source"
-                        }
-                    )
-                    if eval_result:
-                        eval_result["chunk_index"] = chunk_idx
-                        detailed_matches.append(eval_result)
-                        matched_chunk_indices.add(chunk_idx)
-                        break
+            if enable_web_search and not chunk_matched and web_queries_done < max_web_queries:
+                if len(chunk_text.strip().split()) >= 6:
+                    web_queries_done += 1
+                    try:
+                        web_results = await self.web_client.query_web_for_chunk(chunk_text, top_k=2)
+                        for web_res in web_results:
+                            snippet = web_res.get("snippet", "")
+                            if not snippet:
+                                continue
+                            snippet_vec = self.vector_db.generate_embeddings([snippet])[0]
+                            eval_result = self.matcher.evaluate_match(
+                                chunk_text=chunk_text,
+                                chunk_vector=chunk_vec,
+                                candidate_text=snippet,
+                                candidate_vector=snippet_vec,
+                                source_metadata={
+                                    "source_title": web_res.get("title", "Internet Web Page"),
+                                    "source_url": web_res.get("url"),
+                                    "source_category": "Internet Source"
+                                }
+                            )
+                            if eval_result:
+                                eval_result["chunk_index"] = chunk_idx
+                                detailed_matches.append(eval_result)
+                                matched_chunk_indices.add(chunk_idx)
+                                break
+                    except Exception as web_err:
+                        logger.warning(f"Web query for chunk {chunk_idx} failed ({web_err}); skipping.")
 
         # 3. Calculate Overall Scores (Non-overlapping chunk coverage)
         plagiarized_chunks_count = len(matched_chunk_indices)

@@ -99,3 +99,86 @@ class TestAsyncPlagiarismPipeline:
             data = res.json()
             assert data["status"] == "failure"
             assert "corrupted" in data["message"]
+
+    @pytest.mark.asyncio
+    async def test_polling_eager_task_store_progress_and_success(
+        self,
+        client: AsyncClient,
+        auth_headers: dict
+    ):
+        from app.tasks.celery_worker import record_eager_result, EAGER_TASK_STORE
+
+        eager_id = "test_eager_progress_task_456"
+        record_eager_result(
+            task_id=eager_id,
+            state="PROGRESS",
+            step="vectorizing",
+            progress=55,
+            message="Generating embeddings and querying the vector database..."
+        )
+
+        res = await client.get(f"/api/task-status/{eager_id}", headers=auth_headers)
+        assert res.status_code == 200
+        data = res.json()
+        assert data["status"] == "processing"
+        assert data["step"] == "vectorizing"
+        assert data["progress"] == 55
+        assert "embeddings" in data["message"].lower()
+
+        # Update to SUCCESS
+        mock_report = {
+            "scan_id": "eager_scan_789",
+            "document_title": "test_eager.txt",
+            "overall_score": 0.0,
+            "originality_score": 100.0,
+            "matches": []
+        }
+        record_eager_result(
+            task_id=eager_id,
+            state="SUCCESS",
+            result=mock_report,
+            step="completed",
+            progress=100,
+            message="Plagiarism analysis completed successfully!"
+        )
+
+        res_success = await client.get(f"/api/task-status/{eager_id}", headers=auth_headers)
+        assert res_success.status_code == 200
+        succ_data = res_success.json()
+        assert succ_data["status"] == "success"
+        assert succ_data["step"] == "completed"
+        assert succ_data["progress"] == 100
+        assert succ_data["report"]["scan_id"] == "eager_scan_789"
+
+        # Cleanup
+        EAGER_TASK_STORE.pop(eager_id, None)
+
+    @pytest.mark.asyncio
+    async def test_eager_background_task_submission(
+        self,
+        client: AsyncClient,
+        auth_headers: dict,
+        test_user: User
+    ):
+        from app.tasks.celery_worker import EAGER_TASK_STORE
+        file_bytes = b"This is a genuine research document about transformers and attention."
+        files = {
+            "file": ("eager_sample.txt", io.BytesIO(file_bytes), "text/plain")
+        }
+
+        # Submitting without mocking delay tests eager BackgroundTask dispatch
+        response = await client.post(
+            "/api/check-plagiarism",
+            files=files,
+            data={"enable_web_search": "false"},
+            headers=auth_headers
+        )
+        assert response.status_code == 202
+        data = response.json()
+        task_id = data["task_id"]
+        assert task_id.startswith("task_")
+        assert data["status"] == "processing"
+        assert task_id in EAGER_TASK_STORE
+
+        # Cleanup
+        EAGER_TASK_STORE.pop(task_id, None)

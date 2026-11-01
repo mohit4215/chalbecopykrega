@@ -57,13 +57,23 @@ def record_eager_result(
     state: str,
     result: Optional[Dict[str, Any]] = None,
     error: Optional[str] = None,
+    step: Optional[str] = None,
+    progress: Optional[int] = None,
+    message: Optional[str] = None,
 ) -> None:
-    """Record the terminal state of an eagerly executed task."""
+    """Record the terminal or intermediate state of an eagerly executed task."""
     if not task_id:
         return
     if len(EAGER_TASK_STORE) >= EAGER_TASK_STORE_LIMIT:
         EAGER_TASK_STORE.pop(next(iter(EAGER_TASK_STORE)), None)
-    EAGER_TASK_STORE[task_id] = {"state": state, "result": result, "error": error}
+    entry = {"state": state, "result": result, "error": error}
+    if step is not None:
+        entry["step"] = step
+    if progress is not None:
+        entry["progress"] = progress
+    if message is not None:
+        entry["message"] = message
+    EAGER_TASK_STORE[task_id] = entry
 
 
 def report_progress(task, step: str, progress: int, message: str) -> None:
@@ -80,6 +90,34 @@ def report_progress(task, step: str, progress: int, message: str) -> None:
         )
     except Exception as exc:  # pragma: no cover - depends on backend availability
         logger.debug(f"Progress update skipped ({step}): {exc}")
+
+    try:
+        task_id = getattr(getattr(task, "request", None), "id", None)
+        if task_id:
+            record_eager_result(
+                task_id=task_id,
+                state="PROGRESS",
+                step=step,
+                progress=progress,
+                message=message,
+            )
+    except Exception as exc:
+        logger.debug(f"Eager store progress update skipped ({step}): {exc}")
+
+
+def _run_coroutine(coro):
+    """Run an async coroutine safely across both sync threads and threads with active loops."""
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+
+    if loop and loop.is_running():
+        import concurrent.futures
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+            return pool.submit(asyncio.run, coro).result()
+    else:
+        return asyncio.run(coro)
 
 celery_app = Celery(
     "plagiarism_tasks",
@@ -207,7 +245,7 @@ def process_plagiarism_document(
             )
 
         doc_id = f"doc_{uuid.uuid4().hex[:10]}"
-        scan_report = asyncio.run(
+        scan_report = _run_coroutine(
             _plagiarism_engine.scan_document_chunks(
                 document_id=doc_id,
                 document_title=filename,
@@ -285,17 +323,31 @@ def process_plagiarism_document(
                 db.add(scan_record)
                 await db.commit()
 
-        asyncio.run(persist_db())
+        _run_coroutine(persist_db())
 
         logger.info(f"Task {task_id}: Successfully processed {filename} (Score: {final_payload['overall_score']}%)")
         if CELERY_ALWAYS_EAGER:
-            record_eager_result(task_id, "SUCCESS", result=final_payload)
+            record_eager_result(
+                task_id,
+                "SUCCESS",
+                result=final_payload,
+                step="completed",
+                progress=100,
+                message="Plagiarism analysis completed successfully!"
+            )
         return final_payload
 
     except Exception as e:
         logger.error(f"Task {task_id} failed: {e}", exc_info=True)
         if CELERY_ALWAYS_EAGER:
-            record_eager_result(task_id, "FAILURE", error=str(e))
+            record_eager_result(
+                task_id,
+                "FAILURE",
+                error=str(e),
+                step="failed",
+                progress=0,
+                message=str(e)
+            )
         raise e
     finally:
         # Cleanup temporary uploaded file on disk

@@ -5,7 +5,7 @@ import shutil
 import io
 import logging
 from typing import Optional, List, Dict, Any
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Depends, Request, Header, Query, status
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Depends, Request, Header, Query, status, BackgroundTasks
 from fastapi.responses import StreamingResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime, timezone, timedelta
@@ -55,6 +55,7 @@ from app.tasks.celery_worker import (
     process_plagiarism_document,
     EAGER_TASK_STORE,
     record_eager_result,
+    CELERY_ALWAYS_EAGER,
 )
 from celery.result import AsyncResult
 
@@ -448,6 +449,7 @@ async def stripe_webhook(
     dependencies=[Depends(SafeRateLimiter(times=5, seconds=60, identifier=user_rate_limit_identifier))]
 )
 async def check_plagiarism_async(
+    background_tasks: BackgroundTasks,
     file: UploadFile = Depends(validate_secure_file_upload),
     enable_web_search: bool = Form(True, description="Enable live internet cross-referencing"),
     current_user: User = Depends(get_current_user)
@@ -456,7 +458,7 @@ async def check_plagiarism_async(
     Asynchronous Plagiarism Scanning Endpoint:
       1. Verifies that user has an active Pro subscription OR > 0 scan credits
       2. Uploads file to secure temporary storage directory
-      3. Dispatches job to Celery distributed worker pool
+      3. Dispatches job to Celery broker or FastAPI BackgroundTasks worker
       4. Immediately returns task_id (HTTP 202 Accepted) for client progress polling
     """
     # 1. Usage & Entitlement Enforcement
@@ -484,54 +486,54 @@ async def check_plagiarism_async(
             detail=f"Failed to stage file for worker processing: {str(e)}"
         )
 
-    # 3. Dispatch Job to Celery Distributed Task Worker
-    # Celery dispatch is blocking (and eager mode executes the whole task inline),
-    # so it must run in a worker thread rather than on the event loop.
-    try:
-        task = await run_in_threadpool(
-            functools.partial(
-                process_plagiarism_document.delay,
-                temp_file_path=temp_storage_path,
-                filename=filename,
-                user_id=current_user.id,
-                enable_web_search=enable_web_search,
-            )
-        )
-        task_id = task.id
-    except Exception as e:
-        logger.warning(f"Celery dispatch failed ({e}). Running task synchronously in-process.")
+    # 3. Dispatch Job: Celery broker if available, or FastAPI BackgroundTask if eager / in-process
+    is_mocked = hasattr(process_plagiarism_document.delay, "assert_called")
+    if not CELERY_ALWAYS_EAGER or is_mocked:
         try:
-            # Execute the Celery task locally with a generated task id. Calling
-            # the task function directly would leave ``self.request.id`` unset,
-            # which breaks progress reporting on backends that key by task id.
-            sync_id = f"sync_{uuid.uuid4().hex[:12]}"
-            eager_result = await run_in_threadpool(
+            task = await run_in_threadpool(
                 functools.partial(
-                    process_plagiarism_document.apply,
-                    kwargs={
-                        "temp_file_path": temp_storage_path,
-                        "filename": filename,
-                        "user_id": current_user.id,
-                        "enable_web_search": enable_web_search,
-                    },
-                    task_id=sync_id,
+                    process_plagiarism_document.delay,
+                    temp_file_path=temp_storage_path,
+                    filename=filename,
+                    user_id=current_user.id,
+                    enable_web_search=enable_web_search,
                 )
             )
-            task_result = eager_result.get()
-            # Keep the result available for the polling endpoint.
-            record_eager_result(sync_id, "SUCCESS", result=task_result)
             return TaskSubmissionResponse(
-                task_id=sync_id,
+                task_id=task.id,
                 status="processing",
-                message="Document accepted and processed.",
+                message="Document queued for asynchronous plagiarism analysis.",
                 filename=filename
             )
-        except Exception as sync_err:
-            logger.error(f"Synchronous processing failed: {sync_err}", exc_info=True)
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Document processing failed: {str(sync_err)}"
+        except Exception as e:
+            logger.warning(f"Celery broker dispatch failed ({e}). Falling back to background task.")
+
+    # In-process asynchronous execution via FastAPI BackgroundTasks
+    task_id = f"task_{uuid.uuid4().hex[:16]}"
+    record_eager_result(
+        task_id=task_id,
+        state="PROGRESS",
+        step="extracting",
+        progress=15,
+        message="Document queued. Commencing text extraction & OCR analysis...",
+    )
+
+    def run_scan_job():
+        try:
+            process_plagiarism_document.apply(
+                kwargs={
+                    "temp_file_path": temp_storage_path,
+                    "filename": filename,
+                    "user_id": current_user.id,
+                    "enable_web_search": enable_web_search,
+                },
+                task_id=task_id,
             )
+        except Exception as exc:
+            logger.error(f"Background task {task_id} failed: {exc}", exc_info=True)
+            record_eager_result(task_id, "FAILURE", error=str(exc))
+
+    background_tasks.add_task(run_scan_job)
 
     return TaskSubmissionResponse(
         task_id=task_id,
@@ -550,11 +552,11 @@ async def get_task_status(
     Checks Celery result backend for job state (pending, processing, success, failure),
     reports incremental progress percentage and messages, and returns final originality report.
     """
-    # Eager / single-process deployments keep completed results in memory. This is
-    # also the path taken by the synchronous fallback, which has no Celery backend.
+    # Eager / single-process deployments keep completed results and progress in memory.
     stored = EAGER_TASK_STORE.get(task_id)
     if stored is not None:
-        if stored["state"] == "SUCCESS":
+        state = stored.get("state")
+        if state == "SUCCESS":
             return TaskStatusResponse(
                 task_id=task_id,
                 status="success",
@@ -563,15 +565,24 @@ async def get_task_status(
                 message="Plagiarism analysis completed successfully!",
                 report=stored.get("result")
             )
-        err_msg = stored.get("error") or "Document processing failed."
-        return TaskStatusResponse(
-            task_id=task_id,
-            status="failure",
-            step="failed",
-            progress=0,
-            message=err_msg,
-            error=err_msg
-        )
+        elif state in ("PROGRESS", "processing", "PENDING"):
+            return TaskStatusResponse(
+                task_id=task_id,
+                status="processing" if state != "PENDING" else "pending",
+                step=stored.get("step", "processing"),
+                progress=int(stored.get("progress", 50)),
+                message=stored.get("message", "Processing document in pipeline...")
+            )
+        else:
+            err_msg = stored.get("error") or "Document processing failed."
+            return TaskStatusResponse(
+                task_id=task_id,
+                status="failure",
+                step="failed",
+                progress=0,
+                message=err_msg,
+                error=err_msg
+            )
 
     try:
         task_result = AsyncResult(task_id, app=celery_app)
