@@ -47,7 +47,7 @@ const STAGES = [
   { key: 'scoring', label: 'Similarity & NLP scoring', icon: Cpu, defaultPct: 92 },
 ];
 
-export default function UploadComponent({ onScanComplete, isLoading, setIsLoading }) {
+export default function UploadComponent({ onScanComplete, isLoading, setIsLoading, onNeedLogin }) {
   const { token, authFetch } = useAuth();
   const [file, setFile] = useState(null);
   const [enableWeb, setEnableWeb] = useState(true);
@@ -138,9 +138,8 @@ export default function UploadComponent({ onScanComplete, isLoading, setIsLoadin
     setIsWsActive(true);
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const host = import.meta.env.VITE_API_URL
-      ? import.meta.env.VITE_API_URL.replace(/^https?:\/\//, '').replace(/\/+$/, '')
-      : window.location.host;
+    const rawEnv = (import.meta.env.VITE_API_URL || '').replace(/^https?:\/\//, '').replace(/\/+$/, '');
+    const host = rawEnv || (window.location.hostname.includes('render.com') ? 'chalbecopykrega-api.onrender.com' : window.location.host);
 
     const wsUrl = `${protocol}//${host}/ws/task-status/${taskId}`;
     const ws = new WebSocket(wsUrl);
@@ -216,6 +215,15 @@ export default function UploadComponent({ onScanComplete, isLoading, setIsLoadin
       return;
     }
 
+    if (!token) {
+      if (onNeedLogin) {
+        onNeedLogin();
+      } else {
+        setErrorMessage('Please sign in or create a free account to scan documents.');
+      }
+      return;
+    }
+
     setIsLoading(true);
     setErrorMessage('');
     setTaskProgress(10);
@@ -287,6 +295,24 @@ export default function UploadComponent({ onScanComplete, isLoading, setIsLoadin
           </Button>
         )}
       </div>
+
+      {!token && !isLoading && (
+        <div className="mt-4 p-3 bg-gradient-to-r from-indigo-50/80 to-purple-50/80 dark:from-indigo-950/40 dark:to-purple-950/40 border border-indigo-100 dark:border-indigo-800/60 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+          <div className="flex items-center gap-2 text-indigo-900 dark:text-indigo-200">
+            <Sparkles className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
+            <span>Sign in or register to get <strong>3 free AI & Web Plagiarism checks</strong> with full source matches.</span>
+          </div>
+          {onNeedLogin && (
+            <Button
+              size="sm"
+              onClick={onNeedLogin}
+              className="shrink-0 h-7 text-xs font-bold shadow-sm"
+            >
+              Sign In to Scan
+            </Button>
+          )}
+        </div>
+      )}
 
       {errorMessage && (
         <div className="mt-5 p-4 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 rounded-2xl text-xs text-rose-700 dark:text-rose-300 flex items-start gap-2.5">

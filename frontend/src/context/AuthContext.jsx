@@ -26,7 +26,13 @@ export function AuthProvider({ children }) {
     setLoading(false);
   }, [token, user]);
 
-  const apiBase = import.meta.env.VITE_API_URL ? import.meta.env.VITE_API_URL.replace(/\/+$/, '') : '';
+  const apiBase = (() => {
+    let raw = (import.meta.env.VITE_API_URL || 'https://chalbecopykrega-api.onrender.com').trim();
+    if (!raw.startsWith('http://') && !raw.startsWith('https://')) {
+      raw = `https://${raw}`;
+    }
+    return raw.replace(/\/+$/, '');
+  })();
 
   const register = async (email, password) => {
     const res = await fetch(`${apiBase}/api/register`, {
@@ -92,7 +98,10 @@ export function AuthProvider({ children }) {
     if (token) {
       headers.set('Authorization', `Bearer ${token}`);
     }
-    const fullUrl = url.startsWith('http') ? url : `${apiBase}${url}`;
+    const cleanUrl = url.startsWith('/') ? url : `/${url}`;
+    const fullUrl = (url.startsWith('http://') || url.startsWith('https://'))
+      ? url
+      : `${apiBase}${cleanUrl}`;
     return fetch(fullUrl, { ...options, headers });
   };
 

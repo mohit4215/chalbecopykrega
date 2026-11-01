@@ -193,84 +193,84 @@ function MainApp() {
         <BillingDashboard onNavigateToPricing={() => setActiveTab('pricing')} />
       ) : activeTab === 'privacy' && isAuthenticated ? (
         <PrivacySettings />
-      ) : !isAuthenticated && activeTab !== 'pricing' ? (
-        /* Unauthenticated Landing Card */
+      ) : activeTab === 'history' && isAuthenticated ? (
+        <HistoryDashboard
+          onSelectReport={handleSelectHistoryReport}
+          onNewScan={() => setActiveTab('scan')}
+        />
+      ) : activeTab === 'report' && report ? (
+        /* Report Screen: Turnitin Split-Screen Experience */
+        <div className="flex-1 flex flex-col">
+          {/* Sticky Top Header with Circular SVG Originality Gauge */}
+          <ReportStickyHeader
+            report={report}
+            onNewScan={() => setActiveTab('scan')}
+            onDownloadPdf={handleDownloadPDF}
+            isDownloadingPdf={isDownloadingPdf}
+            onPrint={handlePrint}
+          />
+
+          {/* Split Screen Layout */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start flex-1 min-h-[660px]">
+            {/* Left Pane (8 Cols): Full Document Viewer with Bi-directional Highlight Sync */}
+            <div className="lg:col-span-8 h-full min-h-[640px] flex flex-col">
+              <DocumentViewer
+                fullText={report.full_text}
+                matches={report.matches}
+                selectedMatchId={selectedMatch?.id}
+                onSelectMatch={(m) => setSelectedMatch(m)}
+              />
+            </div>
+
+            {/* Right Pane (4 Cols): Matched Sources Sidebar & Score Breakdown */}
+            <div className="lg:col-span-4 space-y-6">
+              <ScoreGauge
+                overallScore={report.overall_score}
+                originalityScore={report.originality_score}
+                summary={report.summary}
+              />
+
+              <SourcesSidebar
+                matches={report.matches}
+                selectedMatchId={selectedMatch?.id}
+                onSelectMatch={(m) => setSelectedMatch(m)}
+                onOpenDiff={handleOpenDiff}
+                onFlagMatch={handleFlagMatch}
+              />
+            </div>
+          </div>
+        </div>
+      ) : !isAuthenticated && (activeTab === 'history' || activeTab === 'billing' || activeTab === 'privacy' || activeTab === 'admin') ? (
+        /* Protected Tab Sign In Prompt */
         <div className="my-auto py-12 max-w-xl mx-auto text-center space-y-4">
           <div className="w-16 h-16 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 rounded-3xl flex items-center justify-center mx-auto shadow-sm">
             <ShieldCheck className="w-8 h-8" />
           </div>
           <h2 className="text-3xl font-black text-slate-900 dark:text-slate-100">
-            Next-Gen Plagiarism Engine
+            Sign In Required
           </h2>
           <p className="text-sm text-slate-500 dark:text-slate-400 max-w-md mx-auto">
-            Sign in to claim your <strong>3 free document verification scans</strong>, or explore our unlimited Pro subscriptions.
+            Please sign in to access your {activeTab === 'history' ? 'historical scans' : activeTab === 'billing' ? 'subscription and billing details' : activeTab === 'privacy' ? 'data privacy settings' : 'dashboard'}.
           </p>
           <div className="flex items-center justify-center gap-3 pt-2">
             <Button size="lg" onClick={() => setAuthModal('login')}>
-              Sign In to Scan
+              Sign In
             </Button>
-            <Button size="lg" variant="outline" onClick={() => setActiveTab('pricing')}>
-              View Plans & Pricing
+            <Button size="lg" variant="outline" onClick={() => setActiveTab('scan')}>
+              Back to Scanner
             </Button>
           </div>
         </div>
-      ) : activeTab === 'history' ? (
-        <HistoryDashboard
-          onSelectReport={handleSelectHistoryReport}
-          onNewScan={() => setActiveTab('scan')}
-        />
-      ) : activeTab === 'scan' ? (
+      ) : (
+        /* Default Tab ('scan') and Fallback: Always display Scanner Dropzone */
         <div className="my-auto py-6">
           <UploadComponent
             onScanComplete={handleScanComplete}
             isLoading={isLoading}
             setIsLoading={setIsLoading}
+            onNeedLogin={() => setAuthModal('login')}
           />
         </div>
-      ) : (
-        /* Report Screen: Turnitin Split-Screen Experience */
-        report && (
-          <div className="flex-1 flex flex-col">
-            {/* Sticky Top Header with Circular SVG Originality Gauge */}
-            <ReportStickyHeader
-              report={report}
-              onNewScan={() => setActiveTab('scan')}
-              onDownloadPdf={handleDownloadPDF}
-              isDownloadingPdf={isDownloadingPdf}
-              onPrint={handlePrint}
-            />
-
-            {/* Split Screen Layout */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start flex-1 min-h-[660px]">
-              {/* Left Pane (8 Cols): Full Document Viewer with Bi-directional Highlight Sync */}
-              <div className="lg:col-span-8 h-full min-h-[640px] flex flex-col">
-                <DocumentViewer
-                  fullText={report.full_text}
-                  matches={report.matches}
-                  selectedMatchId={selectedMatch?.id}
-                  onSelectMatch={(m) => setSelectedMatch(m)}
-                />
-              </div>
-
-              {/* Right Pane (4 Cols): Matched Sources Sidebar & Score Breakdown */}
-              <div className="lg:col-span-4 space-y-6">
-                <ScoreGauge
-                  overallScore={report.overall_score}
-                  originalityScore={report.originality_score}
-                  summary={report.summary}
-                />
-
-                <SourcesSidebar
-                  matches={report.matches}
-                  selectedMatchId={selectedMatch?.id}
-                  onSelectMatch={(m) => setSelectedMatch(m)}
-                  onOpenDiff={handleOpenDiff}
-                  onFlagMatch={handleFlagMatch}
-                />
-              </div>
-            </div>
-          </div>
-        )
       )}
 
       {/* Side-by-Side Snippet Comparison Modal */}
