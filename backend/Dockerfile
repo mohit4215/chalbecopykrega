@@ -30,8 +30,8 @@ COPY requirements.txt .
 RUN pip install --upgrade pip setuptools wheel && \
     pip install --no-cache-dir -r requirements.txt
 
-# Pre-download SentenceTransformer model into image cache to prevent startup delays
-RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')" || true
+# Optional neural embeddings / OCR extras (add requirements-ml.txt to the COPY
+# above and install it here if you need the full semantic pipeline).
 
 # Copy application source tree
 COPY . .
@@ -43,5 +43,7 @@ EXPOSE 8000
 HEALTHCHECK --interval=20s --timeout=10s --start-period=30s --retries=3 \
     CMD curl -f http://localhost:8000/api/health || exit 1
 
-# Launch Uvicorn with 2 worker processes for production concurrency
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]
+# A single worker keeps the in-process eager task store used by the default
+# CELERY_ALWAYS_EAGER=true deployment consistent. Scale horizontally with a
+# real Redis broker/worker instead of adding uvicorn workers.
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]

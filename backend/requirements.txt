@@ -1,41 +1,58 @@
+# Runtime dependencies for the API and worker.
+#
+# This list is intentionally lightweight so a free-tier host (Render, Fly, etc.)
+# can build and boot quickly. The optional neural/OCR stack lives in
+# requirements-ml.txt; without it the engine automatically uses deterministic
+# hashed embeddings and text-based PDF extraction.
+
+# Web framework
 fastapi>=0.110.0
 uvicorn[standard]>=0.28.0
 pydantic>=2.6.0
 pydantic-settings>=2.2.0
 email-validator>=2.1.0
 python-multipart>=0.0.9
+
+# Document extraction (text PDFs, DOCX, plain text)
 pypdf>=4.1.0
 pymupdf>=1.23.0
 python-docx>=1.1.0
-pdf2image>=1.17.0
-pytesseract>=0.3.10
 pillow>=10.2.0
-sentence-transformers>=2.5.1
-torch>=2.2.0
+
+# Numerics & lightweight embeddings (HashingVectorizer)
 numpy>=1.26.0
 scikit-learn>=1.4.0
 datasketch>=1.6.4
-qdrant-client>=1.8.0
+
+# HTTP / scraping
 requests>=2.31.0
 httpx>=0.27.0
-psycopg2-binary>=2.9.9
-pgvector>=0.2.5
+beautifulsoup4>=4.12.3
+
+# Persistence
 sqlalchemy>=2.0.28
 greenlet>=3.0.3
 asyncpg>=0.29.0
 aiosqlite>=0.19.0
+
+# Auth
 passlib[bcrypt]>=1.7.4
 python-jose[cryptography]>=3.3.0
 bcrypt>=4.0.0
+
+# Payments & reports
 stripe>=8.0.0
 reportlab>=4.1.0
 xhtml2pdf>=0.2.15
-spacy>=3.7.4
-beautifulsoup4>=4.12.3
+
+# Background jobs & rate limiting (Redis is optional at runtime)
+celery>=5.3.6
+redis>=5.0.3
+fastapi-limiter==0.1.6
+cachetools>=5.3.0
+
+# Test & lint tooling used by CI
 pytest>=8.0.0
 pytest-asyncio>=0.23.5
 pytest-mock>=3.12.0
 flake8>=7.0.0
-redis>=5.0.3
-fastapi-limiter>=0.1.6
-celery>=5.3.6

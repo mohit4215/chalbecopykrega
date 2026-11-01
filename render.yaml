@@ -1,5 +1,5 @@
 services:
-  # Backend API Service
+  # Backend API Service (single process: SQLite + eager Celery + hashed embeddings)
   - type: web
     name: chalbecopykrega-api
     runtime: python
@@ -7,13 +7,36 @@ services:
     plan: free
     buildCommand: "pip install -r backend/requirements.txt"
     startCommand: "cd backend && uvicorn app.main:app --host 0.0.0.0 --port $PORT"
+    healthCheckPath: /api/health
+    autoDeploy: true
     envVars:
       - key: PYTHON_VERSION
-        value: 3.11.8
+        value: "3.11.8"
+      # SQLite on the service's local disk keeps the free tier dependency-free.
+      # Attach a persistent disk or switch to a managed Postgres URL for durability.
+      - key: DATABASE_URL
+        value: "sqlite+aiosqlite:///./plagiarism_auth.db"
       - key: USE_IN_MEMORY_FALLBACK
         value: "true"
-      - key: EMBEDDING_MODEL_NAME
-        value: "sentence-transformers/all-MiniLM-L6-v2"
+      # No torch / model download during boot on a 512 MB instance.
+      - key: USE_HASHED_EMBEDDINGS
+        value: "true"
+      # Run scans inline; no separate Redis broker or worker service required.
+      - key: CELERY_ALWAYS_EAGER
+        value: "true"
+      - key: JWT_SECRET_KEY
+        generateValue: true
+      - key: CORS_ORIGINS
+        value: "https://chalbecopykrega-app.onrender.com,http://localhost:5173"
+      # Set these in the Render dashboard when enabling payments.
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      - key: SERPAPI_API_KEY
+        sync: false
+      - key: BING_SEARCH_API_KEY
+        sync: false
 
   # Frontend Web Service
   - type: web

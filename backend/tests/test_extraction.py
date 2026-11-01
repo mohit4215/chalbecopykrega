@@ -50,7 +50,7 @@ class TestSlidingWindowChunker:
     def test_sliding_window_spans_and_offsets(self):
         text = "word1 word2 word3 word4 word5 word6 word7 word8 word9 word10"
         chunker = SlidingWindowChunker(window_size=5, overlap=2)
-        chunks = chunker.chunk_text(text)
+        chunks = chunker.chunk(text)
 
         assert len(chunks) > 0
         for chunk in chunks:
@@ -60,7 +60,7 @@ class TestSlidingWindowChunker:
 
     def test_empty_text_chunking(self):
         chunker = SlidingWindowChunker(window_size=10, overlap=3)
-        chunks = chunker.chunk_text("")
+        chunks = chunker.chunk("")
         assert chunks == []
 
 
@@ -78,7 +78,7 @@ class TestDocumentExtractionPipeline:
 
         try:
             pipeline = DocumentExtractionPipeline(chunk_size=10, chunk_overlap=3, enable_ocr=False)
-            result = pipeline.extract(tmp_path)
+            result = pipeline.ingest_document(tmp_path)
 
             assert result.raw_text.strip() == sample_content.strip()
             assert len(result.cleaned_text) > 0
@@ -97,18 +97,18 @@ class TestDocumentExtractionPipeline:
         try:
             pipeline = DocumentExtractionPipeline(enable_ocr=False)
             with pytest.raises(EmptyDocumentError):
-                pipeline.extract(tmp_path)
+                pipeline.ingest_document(tmp_path)
         finally:
             Path(tmp_path).unlink(missing_ok=True)
 
     def test_unsupported_format_raises_error(self):
-        with tempfile.NamedTemporaryFile("w+", suffix=".exe", delete=False) as tmp:
+        with tempfile.NamedTemporaryFile("wb", suffix=".exe", delete=False) as tmp:
             tmp.write(b"binary executable payload")
             tmp_path = tmp.name
 
         try:
             pipeline = DocumentExtractionPipeline(enable_ocr=False)
             with pytest.raises(UnsupportedFormatError):
-                pipeline.extract(tmp_path)
+                pipeline.ingest_document(tmp_path)
         finally:
             Path(tmp_path).unlink(missing_ok=True)

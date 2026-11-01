@@ -32,7 +32,7 @@ class TestAuthEndpoints:
             "password": "StrongPassword99!"
         }
         response = await client.post("/api/register", json=payload)
-        assert response.status_code == 200
+        assert response.status_code == 201
         data = response.json()
         assert "access_token" in data
         assert data["user"]["email"] == "newstudent@stanford.edu"

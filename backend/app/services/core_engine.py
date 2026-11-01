@@ -12,6 +12,7 @@ import os
 import re
 import json
 import logging
+from importlib.util import find_spec
 from typing import List, Dict, Any, Optional, Tuple, Set
 import numpy as np
 import httpx
@@ -19,6 +20,32 @@ import httpx
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="[%(asctime)s] [%(levelname)s] %(message)s")
 logger = logging.getLogger("plagiarism.engine")
+
+
+def _module_available(module_name: str) -> bool:
+    """Cheap availability check that does not import (or download) the module."""
+    try:
+        return find_spec(module_name) is not None
+    except (ImportError, ValueError):
+        return False
+
+
+def hashed_embeddings_enabled() -> bool:
+    """Decide whether to use the lightweight hashed embedding backend.
+
+    Order of precedence:
+      1. ``USE_HASHED_EMBEDDINGS`` explicitly set (true/false) wins.
+      2. On Render (``RENDER=true``) always use hashing: the free tier has
+         ~512 MB RAM and loading torch + all-MiniLM-L6-v2 during startup will
+         either OOM or stall the service.
+      3. Otherwise use hashing only when sentence-transformers is not installed.
+    """
+    raw = os.getenv("USE_HASHED_EMBEDDINGS")
+    if raw is not None and raw.strip() != "":
+        return raw.strip().lower() in {"1", "true", "yes", "on"}
+    if os.getenv("RENDER", "").strip().lower() in {"1", "true", "yes"}:
+        return True
+    return not _module_available("sentence_transformers")
 
 
 # ==============================================================================
@@ -189,6 +216,14 @@ class InternalVectorDB:
         self._qdrant_client = None
         self._fallback_store = []
 
+        # Pick the embedding backend once, at construction time. The hashed
+        # backend is stateless and needs no model download, which keeps container
+        # startup fast and memory-bounded on constrained hosts (e.g. Render free).
+        self.embedding_backend = "hashed" if hashed_embeddings_enabled() else "sentence-transformers"
+        if self.embedding_backend == "hashed":
+            self._model = "fallback"
+            logger.info("Using hashed bag-of-words embeddings (USE_HASHED_EMBEDDINGS).")
+
         self._init_qdrant()
 
     @property
@@ -235,17 +270,51 @@ class InternalVectorDB:
 
         if self.model != "fallback":
             return self.model.encode(texts, convert_to_numpy=True, normalize_embeddings=True)
-        else:
-            # Resilient TF-IDF fallback if torch/sentence_transformers is not installed
-            from sklearn.feature_extraction.text import TfidfVectorizer
-            vec = TfidfVectorizer(max_features=self.VECTOR_DIM, stop_words="english")
-            mat = vec.fit_transform(texts).toarray()
-            # Pad to 384 dims if vocabulary is small
-            if mat.shape[1] < self.VECTOR_DIM:
-                mat = np.pad(mat, ((0, 0), (0, self.VECTOR_DIM - mat.shape[1])))
-            norms = np.linalg.norm(mat, axis=1, keepdims=True)
+
+        return self._hashed_embeddings(texts)
+
+    def _hashed_embeddings(self, texts: List[str]) -> np.ndarray:
+        """Stateless hashing-vectorizer embeddings.
+
+        A fitted TF-IDF vectorizer must not be used here: each call would learn a
+        different vocabulary, so vectors stored during indexing would not be
+        comparable with vectors produced for a later query. HashingVectorizer is
+        deterministic across processes and calls, needs no fitting, and keeps the
+        memory footprint flat.
+        """
+        try:
+            from sklearn.feature_extraction.text import HashingVectorizer
+
+            vectorizer = HashingVectorizer(
+                n_features=self.VECTOR_DIM,
+                alternate_sign=False,
+                norm="l2",
+                ngram_range=(1, 2),
+                stop_words="english",
+            )
+            matrix = vectorizer.transform(texts).toarray().astype(np.float32)
+            # Guard against all-zero rows for empty / stop-word-only input.
+            norms = np.linalg.norm(matrix, axis=1, keepdims=True)
             norms[norms == 0] = 1.0
-            return mat / norms
+            return matrix / norms
+        except Exception as e:
+            logger.warning(f"HashingVectorizer unavailable ({e}). Using stdlib token hashing.")
+            return self._stdlib_hashed_embeddings(texts)
+
+    def _stdlib_hashed_embeddings(self, texts: List[str]) -> np.ndarray:
+        """Last-resort dependency-free embedding: stable token hashing into 384 dims."""
+        import hashlib
+
+        matrix = np.zeros((len(texts), self.VECTOR_DIM), dtype=np.float32)
+        for row, text in enumerate(texts):
+            for token in re.findall(r"\b\w+\b", (text or "").lower()):
+                digest = hashlib.md5(token.encode("utf-8")).digest()
+                bucket = int.from_bytes(digest[:4], "little") % self.VECTOR_DIM
+                matrix[row, bucket] += 1.0
+            norm = float(np.linalg.norm(matrix[row]))
+            if norm > 0:
+                matrix[row] /= norm
+        return matrix
 
     def index_submission(self, document_id: str, student_name: str, title: str, chunks: List[str]) -> int:
         """

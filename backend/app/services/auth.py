@@ -1,4 +1,6 @@
 import os
+import secrets
+import logging
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 from fastapi import Depends, HTTPException, status
@@ -11,10 +13,57 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.db_models import User
 from app.services.database import get_db_session
 
+logger = logging.getLogger("plagiarism.auth")
+
 # Security Configuration
-SECRET_KEY = os.getenv("JWT_SECRET_KEY", "super-secret-originalityguard-jwt-key-384bit")
+# A secret must come from the environment in production. For local development
+# (and single-instance hosts without env configuration) a random secret is
+# generated once and persisted next to the backend package so tokens survive
+# restarts. The old hardcoded fallback secret is never used.
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 60 * 24)) # 24 hours
+
+_INSECURE_DEFAULT_SECRETS = {
+    "super-secret-originalityguard-jwt-key-384bit",
+    "your-secret-key",
+    "changeme",
+    "secret",
+}
+
+
+def _load_or_create_secret() -> str:
+    env_secret = (os.getenv("JWT_SECRET_KEY") or "").strip()
+    if env_secret and env_secret not in _INSECURE_DEFAULT_SECRETS:
+        return env_secret
+
+    secret_file = os.getenv(
+        "JWT_SECRET_FILE",
+        os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), ".jwt_secret"),
+    )
+    try:
+        with open(secret_file, "r", encoding="utf-8") as fh:
+            stored = fh.read().strip()
+        if len(stored) >= 32:
+            return stored
+    except OSError:
+        pass
+
+    generated = secrets.token_urlsafe(48)
+    try:
+        with open(secret_file, "w", encoding="utf-8") as fh:
+            fh.write(generated)
+        os.chmod(secret_file, 0o600)
+        logger.warning(
+            "JWT_SECRET_KEY was not set; generated a persistent development secret at %s. "
+            "Set JWT_SECRET_KEY in production to share tokens across instances.",
+            secret_file,
+        )
+    except OSError as exc:
+        logger.warning("Could not persist JWT secret (%s); using an in-memory secret.", exc)
+    return generated
+
+
+SECRET_KEY = _load_or_create_secret()
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/login", auto_error=False)

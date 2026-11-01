@@ -1,0 +1,16 @@
+# Optional heavy extras: dense sentence embeddings and OCR.
+#
+# Install after requirements.txt when you want the full semantic pipeline:
+#     pip install -r requirements-ml.txt
+#
+# OCR also needs the system packages `tesseract-ocr` and `poppler-utils`.
+# On memory-constrained hosts leave this file out and keep
+# USE_HASHED_EMBEDDINGS=true (automatic on Render).
+sentence-transformers>=2.5.1
+torch>=2.2.0
+spacy>=3.7.4
+qdrant-client>=1.8.0
+pgvector>=0.2.5
+psycopg2-binary>=2.9.9
+pdf2image>=1.17.0
+pytesseract>=0.3.10

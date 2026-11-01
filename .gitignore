@@ -35,6 +35,8 @@ yarn-error.log*
 # Environment & Local Secrets
 .env
 *.local
+.jwt_secret
+backend/.jwt_secret
 
 # IDEs & System Files
 .vscode/
