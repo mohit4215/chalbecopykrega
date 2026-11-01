@@ -2,6 +2,7 @@ fastapi>=0.110.0
 uvicorn[standard]>=0.28.0
 pydantic>=2.6.0
 pydantic-settings>=2.2.0
+email-validator>=2.1.0
 python-multipart>=0.0.9
 pypdf>=4.1.0
 pymupdf>=1.23.0
