@@ -182,3 +182,29 @@ class TestAsyncPlagiarismPipeline:
 
         # Cleanup
         EAGER_TASK_STORE.pop(task_id, None)
+
+    def test_websocket_task_status_streaming(self):
+        from starlette.testclient import TestClient
+        from app.main import app
+        from app.services.task_stream import publish_task_event, EAGER_TASK_STORE
+
+        test_task_id = "ws_test_task_001"
+        publish_task_event(
+            task_id=test_task_id,
+            event={
+                "task_id": test_task_id,
+                "status": "processing",
+                "step": "extracting",
+                "progress": 20,
+                "message": "Extracting text and applying OCR...",
+            }
+        )
+
+        with TestClient(app) as test_client:
+            with test_client.websocket_connect(f"/ws/task-status/{test_task_id}") as websocket:
+                data = websocket.receive_json()
+                assert data["task_id"] == test_task_id
+                assert data["status"] == "processing"
+                assert data["step"] == "extracting"
+
+        EAGER_TASK_STORE.pop(test_task_id, None)

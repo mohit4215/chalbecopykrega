@@ -42,24 +42,30 @@ const STAGES = [
 ];
 
 export default function UploadComponent({ onScanComplete, isLoading, setIsLoading }) {
-  const { authFetch } = useAuth();
+  const { token, authFetch } = useAuth();
   const [file, setFile] = useState(null);
   const [enableWeb, setEnableWeb] = useState(true);
   const [errorMessage, setErrorMessage] = useState('');
   
-  // Asynchronous Task Polling State
+  // Asynchronous Task State (WebSocket Live Stream + Resilient Fallback)
   const [activeTaskId, setActiveTaskId] = useState(null);
   const [taskProgress, setTaskProgress] = useState(5);
   const [currentStep, setCurrentStep] = useState('extracting');
   const [statusMessage, setStatusMessage] = useState('Submitting document to asynchronous task queue...');
+  const [isWsActive, setIsWsActive] = useState(false);
   
   const pollIntervalRef = useRef(null);
+  const wsRef = useRef(null);
 
-  // Clear polling on unmount
+  // Clear polling & WebSocket on unmount
   useEffect(() => {
     return () => {
       if (pollIntervalRef.current) {
         clearInterval(pollIntervalRef.current);
+      }
+      if (wsRef.current) {
+        wsRef.current.close();
+        wsRef.current = null;
       }
     };
   }, []);
@@ -100,7 +106,7 @@ export default function UploadComponent({ onScanComplete, isLoading, setIsLoadin
     setErrorMessage('');
   };
 
-  // Poll Celery task status endpoint every 3 seconds
+  // Fallback: Poll Celery task status endpoint if WebSockets are unavailable
   const startTaskPolling = (taskId) => {
     if (pollIntervalRef.current) {
       clearInterval(pollIntervalRef.current);
@@ -108,7 +114,7 @@ export default function UploadComponent({ onScanComplete, isLoading, setIsLoadin
 
     setActiveTaskId(taskId);
     setTaskProgress(15);
-    setStatusMessage('Queued in distributed Celery worker pool...');
+    setStatusMessage('Queued in worker pipeline (polling fallback)...');
 
     pollIntervalRef.current = setInterval(async () => {
       try {
@@ -123,7 +129,6 @@ export default function UploadComponent({ onScanComplete, isLoading, setIsLoadin
           if (data.step) setCurrentStep(data.step);
           if (data.message) setStatusMessage(data.message);
         } else if (data.status === 'success') {
-          // Completed!
           clearInterval(pollIntervalRef.current);
           setTaskProgress(100);
           setStatusMessage('Analysis complete! Rendering originality report...');
@@ -132,16 +137,99 @@ export default function UploadComponent({ onScanComplete, isLoading, setIsLoadin
             onScanComplete(data.report);
           }, 600);
         } else if (data.status === 'failure') {
-          // Failed
           clearInterval(pollIntervalRef.current);
           setIsLoading(false);
           setErrorMessage(data.error || data.message || 'Background document scan failed.');
         }
       } catch (err) {
-        // Tolerant network retry during polling
         console.warn('Task polling ping failed:', err);
       }
     }, 3000);
+  };
+
+  // Real-Time WebSocket Progress Streamer (Redis Pub/Sub backed)
+  const startTaskWebSocket = (taskId) => {
+    if (pollIntervalRef.current) {
+      clearInterval(pollIntervalRef.current);
+    }
+    if (wsRef.current) {
+      wsRef.current.close();
+      wsRef.current = null;
+    }
+
+    setActiveTaskId(taskId);
+    setTaskProgress(15);
+    setStatusMessage('Connecting to real-time event channel...');
+    setIsWsActive(false);
+
+    // Compute WebSocket protocol and base URL
+    const apiUrl = import.meta.env.VITE_API_URL ? import.meta.env.VITE_API_URL.replace(/\/+$/, '') : '';
+    let wsBase;
+    if (apiUrl) {
+      wsBase = apiUrl.replace(/^http/, 'ws');
+    } else {
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      wsBase = `${protocol}//${window.location.host}`;
+    }
+
+    const tokenParam = token ? `?token=${encodeURIComponent(token)}` : '';
+    const wsUrl = `${wsBase}/ws/task-status/${taskId}${tokenParam}`;
+
+    try {
+      const ws = new WebSocket(wsUrl);
+      wsRef.current = ws;
+
+      ws.onopen = () => {
+        setIsWsActive(true);
+        setStatusMessage('Connected to live Redis Pub/Sub stream.');
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.status === 'processing' || data.status === 'pending') {
+            setTaskProgress(data.progress || 50);
+            if (data.step) setCurrentStep(data.step);
+            if (data.message) setStatusMessage(data.message);
+          } else if (data.status === 'success') {
+            setIsWsActive(false);
+            setTaskProgress(100);
+            setStatusMessage('Analysis complete! Rendering originality report...');
+            if (wsRef.current) {
+              wsRef.current.close();
+              wsRef.current = null;
+            }
+            setTimeout(() => {
+              setIsLoading(false);
+              onScanComplete(data.report);
+            }, 500);
+          } else if (data.status === 'failure') {
+            setIsWsActive(false);
+            setIsLoading(false);
+            setErrorMessage(data.error || data.message || 'Background document scan failed.');
+            if (wsRef.current) {
+              wsRef.current.close();
+              wsRef.current = null;
+            }
+          }
+        } catch (parseErr) {
+          console.warn('Failed to parse WebSocket JSON payload:', parseErr);
+        }
+      };
+
+      ws.onerror = (err) => {
+        console.warn('WebSocket stream error; switching to resilient HTTP polling:', err);
+        setIsWsActive(false);
+        startTaskPolling(taskId);
+      };
+
+      ws.onclose = () => {
+        setIsWsActive(false);
+      };
+    } catch (wsErr) {
+      console.warn('WebSocket connection attempt failed; falling back to HTTP polling:', wsErr);
+      startTaskPolling(taskId);
+    }
   };
 
   const handleUploadAndScan = async () => {
@@ -172,9 +260,9 @@ export default function UploadComponent({ onScanComplete, isLoading, setIsLoadin
 
       const resData = await response.json();
 
-      // Check if asynchronous task_id was returned
+      // Connect to real-time WebSocket stream without polling
       if (resData.task_id) {
-        startTaskPolling(resData.task_id);
+        startTaskWebSocket(resData.task_id);
       } else if (resData.report || resData.overall_score !== undefined) {
         // Direct synchronous response fallback
         onScanComplete(resData.report || resData);
@@ -275,11 +363,22 @@ export default function UploadComponent({ onScanComplete, isLoading, setIsLoadin
             })}
           </div>
 
-          <div className="text-center pt-2">
+          <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
             <span className="inline-flex items-center gap-1.5 text-[11px] text-slate-400 bg-slate-50 px-3 py-1 rounded-full border border-slate-200">
               <Clock className="w-3 h-3" />
-              <span>Celery Worker Job: <strong className="font-mono text-slate-600">{activeTaskId?.slice(0, 12)}...</strong></span>
+              <span>Celery Job: <strong className="font-mono text-slate-600">{activeTaskId?.slice(0, 10)}...</strong></span>
             </span>
+            {isWsActive ? (
+              <span className="inline-flex items-center gap-1.5 text-[11px] text-emerald-700 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200 font-semibold animate-pulse">
+                <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                <span>Live WebSocket Stream</span>
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 text-[11px] text-slate-500 bg-slate-50 px-3 py-1 rounded-full border border-slate-200">
+                <span className="w-2 h-2 rounded-full bg-amber-400"></span>
+                <span>Polling Fallback</span>
+              </span>
+            )}
           </div>
         </div>
       ) : (

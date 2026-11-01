@@ -101,6 +101,20 @@ def report_progress(task, step: str, progress: int, message: str) -> None:
                 progress=progress,
                 message=message,
             )
+            try:
+                from app.services.task_stream import publish_task_event
+                publish_task_event(
+                    task_id=task_id,
+                    event={
+                        "task_id": task_id,
+                        "status": "processing",
+                        "step": step,
+                        "progress": progress,
+                        "message": message,
+                    }
+                )
+            except Exception as stream_err:
+                logger.debug(f"Progress streaming event dispatch failed: {stream_err}")
     except Exception as exc:
         logger.debug(f"Eager store progress update skipped ({step}): {exc}")
 
@@ -335,6 +349,22 @@ def process_plagiarism_document(
                 progress=100,
                 message="Plagiarism analysis completed successfully!"
             )
+        try:
+            from app.services.task_stream import publish_task_event
+            publish_task_event(
+                task_id=task_id,
+                event={
+                    "task_id": task_id,
+                    "status": "success",
+                    "step": "completed",
+                    "progress": 100,
+                    "message": "Plagiarism analysis completed successfully!",
+                    "report": final_payload,
+                }
+            )
+        except Exception as pub_err:
+            logger.debug(f"Terminal success event publish failed: {pub_err}")
+
         return final_payload
 
     except Exception as e:
@@ -348,6 +378,21 @@ def process_plagiarism_document(
                 progress=0,
                 message=str(e)
             )
+        try:
+            from app.services.task_stream import publish_task_event
+            publish_task_event(
+                task_id=task_id,
+                event={
+                    "task_id": task_id,
+                    "status": "failure",
+                    "step": "failed",
+                    "progress": 0,
+                    "message": str(e),
+                    "error": str(e),
+                }
+            )
+        except Exception as pub_err:
+            logger.debug(f"Terminal failure event publish failed: {pub_err}")
         raise e
     finally:
         # Cleanup temporary uploaded file on disk
