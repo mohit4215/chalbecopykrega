@@ -228,6 +228,47 @@ Ingests reference papers into the database to expand the plagiarism corpus.
 
 ---
 
+## Deploying the Backend on Render
+
+`render.yaml` describes a self-contained free-tier deployment: one Python web
+service (API) and one static site (frontend). The API runs without Postgres,
+Redis, or a separate worker.
+
+| Setting | Value |
+| --- | --- |
+| Build command | `pip install -r backend/requirements.txt` |
+| Start command | `cd backend && uvicorn app.main:app --host 0.0.0.0 --port $PORT` |
+| Health check path | `/api/health` |
+
+Required environment variables:
+
+```bash
+DATABASE_URL=sqlite+aiosqlite:///./plagiarism_auth.db
+USE_HASHED_EMBEDDINGS=true      # no torch model download on a 512 MB instance
+CELERY_ALWAYS_EAGER=true        # scan inline; no Redis broker/worker needed
+JWT_SECRET_KEY=<32+ random chars>
+CORS_ORIGINS=https://chalbecopykrega-app.onrender.com
+```
+
+Stripe payments additionally need `STRIPE_SECRET_KEY` and
+`STRIPE_WEBHOOK_SECRET`. Webhooks with an invalid signature are rejected; set
+`ALLOW_UNSIGNED_WEBHOOKS=true` only for local development.
+
+Notes for the free tier:
+
+- SQLite lives on the instance's local disk. Attach a Render disk or set a
+  managed `DATABASE_URL` (`postgresql://...` is adapted to `asyncpg`) if scan
+  history must survive redeploys.
+- `USE_HASHED_EMBEDDINGS` defaults to on whenever `RENDER=true` or
+  `sentence-transformers` is not installed. The hashed backend detects exact
+  copying and lexical overlap; install `backend/requirements-ml.txt` and set
+  `USE_HASHED_EMBEDDINGS=false` for neural paraphrase detection.
+- To move to the full async architecture, provision Redis, set
+  `CELERY_ALWAYS_EAGER=false` plus `REDIS_URL`, and run a worker with
+  `celery -A app.tasks.celery_worker.celery_app worker --loglevel=info`.
+
+---
+
 ## Production Scaling Architecture
 
 1. **Celery / Redis Asynchronous Task Queue**:

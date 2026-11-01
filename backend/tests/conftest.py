@@ -44,10 +44,20 @@ async def init_test_database():
 
 @pytest_asyncio.fixture
 async def db_session() -> AsyncGenerator[AsyncSession, None]:
-    """Provides an isolated database session per test with automatic rollback."""
-    async with TestAsyncSessionLocal() as session:
-        yield session
-        await session.rollback()
+    """Provides an isolated database session per test with automatic rollback.
+
+    The session joins an outer transaction so that commits performed inside an
+    endpoint (or fixture) are discarded at teardown instead of leaking into the
+    next test.
+    """
+    async with test_engine.connect() as connection:
+        transaction = await connection.begin()
+        session = AsyncSession(bind=connection, expire_on_commit=False)
+        try:
+            yield session
+        finally:
+            await session.close()
+            await transaction.rollback()
 
 @pytest_asyncio.fixture
 async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:

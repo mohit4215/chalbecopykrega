@@ -9,8 +9,8 @@ class Settings(BaseSettings):
     
     # Internal Vector Database (PostgreSQL + pgvector)
     DATABASE_URL: str = os.getenv(
-        "DATABASE_URL", 
-        "postgresql://postgres:postgres@localhost:5432/plagiarism_db"
+        "DATABASE_URL",
+        "sqlite+aiosqlite:///./plagiarism_auth.db"
     )
     USE_IN_MEMORY_FALLBACK: bool = True  # Allows running standalone without Postgres instance
     

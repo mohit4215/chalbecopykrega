@@ -3,6 +3,7 @@ import uuid
 import tempfile
 import shutil
 import io
+import logging
 from typing import Optional, List, Dict, Any
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Depends, Request, Header, Query, status
 from fastapi.responses import StreamingResponse, Response
@@ -11,6 +12,8 @@ from datetime import datetime, timezone, timedelta
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import select, func, desc
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.concurrency import run_in_threadpool
+import functools
 
 from app.config import settings
 from app.models.db_models import User, ScanHistory
@@ -47,8 +50,15 @@ from app.services.security import (
     user_rate_limit_identifier,
     ip_rate_limit_identifier
 )
-from app.tasks.celery_worker import celery_app, process_plagiarism_document
+from app.tasks.celery_worker import (
+    celery_app,
+    process_plagiarism_document,
+    EAGER_TASK_STORE,
+    record_eager_result,
+)
 from celery.result import AsyncResult
+
+logger = logging.getLogger("plagiarism.main")
 
 # Initialize FastAPI application
 app = FastAPI(
@@ -316,7 +326,7 @@ async def on_startup():
 async def register_user(payload: RegisterRequest, db: AsyncSession = Depends(get_db_session)):
     existing = await db.execute(select(User).where(User.email == payload.email))
     if existing.scalar_one_or_none():
-        raise HTTPException(status_code=400, detail="An account with this email address already exists.")
+        raise HTTPException(status_code=400, detail="An account with this email address is already registered.")
 
     admin_emails = [e.strip().lower() for e in os.getenv("ADMIN_EMAILS", "admin@originalityguard.com,mohit@originalityguard.com").split(",") if e.strip()]
     is_admin = payload.email.lower() in admin_emails or os.getenv("INIT_ALL_ADMIN", "false").lower() == "true"
@@ -352,7 +362,7 @@ async def login_user(payload: LoginRequest, db: AsyncSession = Depends(get_db_se
     user = res.scalar_one_or_none()
 
     if not user or not verify_password(payload.password, user.hashed_password):
-        raise HTTPException(status_code=401, detail="Incorrect email or password.")
+        raise HTTPException(status_code=401, detail="Invalid email or password.")
 
     token = create_access_token(data={"sub": user.email, "uid": user.id})
     return AuthTokenResponse(
@@ -489,26 +499,35 @@ async def check_plagiarism_async(
         )
 
     # 3. Dispatch Job to Celery Distributed Task Worker
+    # Celery dispatch is blocking (and eager mode executes the whole task inline),
+    # so it must run in a worker thread rather than on the event loop.
     try:
-        task = process_plagiarism_document.delay(
-            temp_file_path=temp_storage_path,
-            filename=filename,
-            user_id=current_user.id,
-            enable_web_search=enable_web_search
+        task = await run_in_threadpool(
+            functools.partial(
+                process_plagiarism_document.delay,
+                temp_file_path=temp_storage_path,
+                filename=filename,
+                user_id=current_user.id,
+                enable_web_search=enable_web_search,
+            )
         )
         task_id = task.id
     except Exception as e:
         logger.warning(f"Celery dispatch failed ({e}). Running task synchronously via eager fallback.")
         try:
             # Fallback to direct synchronous execution if Celery broker is offline
-            task_result = process_plagiarism_document(
-                temp_file_path=temp_storage_path,
-                filename=filename,
-                user_id=current_user.id,
-                enable_web_search=enable_web_search
+            task_result = await run_in_threadpool(
+                functools.partial(
+                    process_plagiarism_document,
+                    temp_file_path=temp_storage_path,
+                    filename=filename,
+                    user_id=current_user.id,
+                    enable_web_search=enable_web_search,
+                )
             )
-            # Store in local task memory or return completed
+            # Keep the result available for the polling endpoint.
             sync_id = f"sync_{uuid.uuid4().hex[:12]}"
+            record_eager_result(sync_id, "SUCCESS", result=task_result)
             return TaskSubmissionResponse(
                 task_id=sync_id,
                 status="processing",
@@ -538,6 +557,29 @@ async def get_task_status(
     Checks Celery result backend for job state (pending, processing, success, failure),
     reports incremental progress percentage and messages, and returns final originality report.
     """
+    # Eager / single-process deployments keep completed results in memory. This is
+    # also the path taken by the synchronous fallback, which has no Celery backend.
+    stored = EAGER_TASK_STORE.get(task_id)
+    if stored is not None:
+        if stored["state"] == "SUCCESS":
+            return TaskStatusResponse(
+                task_id=task_id,
+                status="success",
+                step="completed",
+                progress=100,
+                message="Plagiarism analysis completed successfully!",
+                report=stored.get("result")
+            )
+        err_msg = stored.get("error") or "Document processing failed."
+        return TaskStatusResponse(
+            task_id=task_id,
+            status="failure",
+            step="failed",
+            progress=0,
+            message=err_msg,
+            error=err_msg
+        )
+
     try:
         task_result = AsyncResult(task_id, app=celery_app)
         state = task_result.state

@@ -1,4 +1,5 @@
 import os
+import json
 import logging
 from typing import Dict, Any, Optional
 import stripe
@@ -10,7 +11,13 @@ logger = logging.getLogger("plagiarism.stripe")
 
 # Configure Stripe API Keys from Environment
 STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY", "sk_test_placeholder_key_for_development")
-STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET", "whsec_placeholder_webhook_secret")
+_PLACEHOLDER_WEBHOOK_SECRETS = {"", "whsec_placeholder_webhook_secret"}
+STRIPE_WEBHOOK_SECRET = (os.getenv("STRIPE_WEBHOOK_SECRET") or "").strip()
+if STRIPE_WEBHOOK_SECRET in _PLACEHOLDER_WEBHOOK_SECRETS:
+    STRIPE_WEBHOOK_SECRET = ""
+# Unsigned payload parsing is a development-only escape hatch. Production must
+# configure STRIPE_WEBHOOK_SECRET, otherwise all payment events are rejected.
+ALLOW_UNSIGNED_WEBHOOKS = os.getenv("ALLOW_UNSIGNED_WEBHOOKS", "false").strip().lower() in {"1", "true", "yes", "on"}
 stripe.api_key = STRIPE_SECRET_KEY
 
 # Plan Definitions & Unit Pricing
@@ -159,6 +166,33 @@ class StripeService:
             return return_url
 
     @classmethod
+    def _verify_and_parse_event(cls, payload_bytes: bytes, sig_header: str) -> Dict[str, Any]:
+        """Verify the Stripe signature and return the event payload.
+
+        With a webhook secret configured, a missing or invalid signature is a hard
+        error. Unsigned payloads are accepted only when ALLOW_UNSIGNED_WEBHOOKS is
+        explicitly enabled for local development.
+        """
+        if STRIPE_WEBHOOK_SECRET:
+            if not sig_header:
+                raise ValueError("Missing Stripe-Signature header")
+            try:
+                return stripe.Webhook.construct_event(
+                    payload_bytes, sig_header, STRIPE_WEBHOOK_SECRET
+                )
+            except Exception as exc:
+                raise ValueError("Invalid Stripe webhook signature") from exc
+
+        if not ALLOW_UNSIGNED_WEBHOOKS:
+            raise ValueError("Stripe webhook secret is not configured; refusing unsigned events.")
+
+        logger.warning("Accepting an UNSIGNED Stripe webhook (ALLOW_UNSIGNED_WEBHOOKS=true).")
+        try:
+            return json.loads(payload_bytes.decode("utf-8"))
+        except Exception as exc:
+            raise ValueError("Invalid webhook payload") from exc
+
+    @classmethod
     async def handle_webhook_event(
         cls,
         payload_bytes: bytes,
@@ -171,17 +205,7 @@ class StripeService:
           - invoice.payment_succeeded
           - customer.subscription.deleted
         """
-        try:
-            event = stripe.Webhook.construct_event(
-                payload_bytes, sig_header, STRIPE_WEBHOOK_SECRET
-            )
-        except Exception as e:
-            logger.warning(f"Webhook signature verification failed ({e}). Parsing payload directly for dev/test.")
-            import json
-            try:
-                event = json.loads(payload_bytes.decode("utf-8"))
-            except Exception:
-                raise ValueError("Invalid webhook payload")
+        event = cls._verify_and_parse_event(payload_bytes, sig_header)
 
         event_type = event.get("type")
         data_object = event.get("data", {}).get("object", {})

@@ -41,7 +41,7 @@ class TestAsyncPlagiarismPipeline:
         mock_async_result = MagicMock()
         mock_async_result.state = "PENDING"
 
-        with patch("celery.result.AsyncResult", return_value=mock_async_result):
+        with patch("app.main.AsyncResult", return_value=mock_async_result):
             res = await client.get("/api/task-status/task_123", headers=auth_headers)
             assert res.status_code == 200
             data = res.json()
@@ -58,7 +58,7 @@ class TestAsyncPlagiarismPipeline:
             "message": "Generating embeddings and querying Qdrant..."
         }
 
-        with patch("celery.result.AsyncResult", return_value=mock_async_result):
+        with patch("app.main.AsyncResult", return_value=mock_async_result):
             res = await client.get("/api/task-status/task_123", headers=auth_headers)
             assert res.status_code == 200
             data = res.json()
@@ -79,7 +79,7 @@ class TestAsyncPlagiarismPipeline:
         mock_async_result.state = "SUCCESS"
         mock_async_result.result = mock_report
 
-        with patch("celery.result.AsyncResult", return_value=mock_async_result):
+        with patch("app.main.AsyncResult", return_value=mock_async_result):
             res = await client.get("/api/task-status/task_123", headers=auth_headers)
             assert res.status_code == 200
             data = res.json()
@@ -93,7 +93,7 @@ class TestAsyncPlagiarismPipeline:
         mock_async_result.state = "FAILURE"
         mock_async_result.info = "Document corrupted: unreadable binary"
 
-        with patch("celery.result.AsyncResult", return_value=mock_async_result):
+        with patch("app.main.AsyncResult", return_value=mock_async_result):
             res = await client.get("/api/task-status/task_123", headers=auth_headers)
             assert res.status_code == 200
             data = res.json()

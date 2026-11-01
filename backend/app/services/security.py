@@ -279,7 +279,13 @@ class RateLimitingManager:
     @classmethod
     async def init(cls, redis_url: Optional[str] = None):
         """Initializes Redis async connection for FastAPILimiter."""
-        url = redis_url or os.getenv("REDIS_URL", "redis://localhost:6379/0")
+        url = redis_url or os.getenv("REDIS_URL")
+        if not url:
+            # No Redis configured (single-service deployment). Skip the socket
+            # attempt entirely so startup is not delayed by connection timeouts.
+            cls.is_active = False
+            logger.info("REDIS_URL not set; distributed rate limiting disabled (pass-through mode).")
+            return
         try:
             import redis.asyncio as aioredis
             from fastapi_limiter import FastAPILimiter

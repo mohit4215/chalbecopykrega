@@ -115,16 +115,20 @@ class TestStripeMonetizationMocking:
             }
         }
 
-        # Send raw webhook payload
+        # Send raw webhook payload with a signature that the (mocked) verifier accepts
         payload_bytes = json.dumps(webhook_event).encode("utf-8")
-        response = await client.post(
-            "/api/webhook",
-            content=payload_bytes,
-            headers={
-                "Content-Type": "application/json",
-                "stripe-signature": "t=123,v1=mock_signature"
-            }
-        )
+        with patch(
+            "app.services.stripe_service.stripe.Webhook.construct_event",
+            return_value=webhook_event,
+        ):
+            response = await client.post(
+                "/api/webhook",
+                content=payload_bytes,
+                headers={
+                    "Content-Type": "application/json",
+                    "stripe-signature": "t=123,v1=mock_signature"
+                }
+            )
         assert response.status_code == 200
         assert response.json()["status"] == "processed"
 
@@ -159,14 +163,18 @@ class TestStripeMonetizationMocking:
         }
 
         payload_bytes = json.dumps(webhook_event).encode("utf-8")
-        response = await client.post(
-            "/api/webhook",
-            content=payload_bytes,
-            headers={
-                "Content-Type": "application/json",
-                "stripe-signature": "t=123,v1=mock_signature"
-            }
-        )
+        with patch(
+            "app.services.stripe_service.stripe.Webhook.construct_event",
+            return_value=webhook_event,
+        ):
+            response = await client.post(
+                "/api/webhook",
+                content=payload_bytes,
+                headers={
+                    "Content-Type": "application/json",
+                    "stripe-signature": "t=123,v1=mock_signature"
+                }
+            )
         assert response.status_code == 200
 
         # Verify user upgraded to PRO
@@ -175,3 +183,35 @@ class TestStripeMonetizationMocking:
         updated_user = res.scalar_one()
         assert updated_user.subscription_tier == "pro"
         assert updated_user.subscription_status == "active"
+
+    @pytest.mark.asyncio
+    async def test_stripe_webhook_rejects_invalid_signature(
+        self,
+        client: AsyncClient,
+        test_user: User,
+    ):
+        """An invalid signature must not be able to grant credits."""
+        webhook_event = {
+            "id": "evt_forged",
+            "type": "checkout.session.completed",
+            "data": {
+                "object": {
+                    "client_reference_id": test_user.id,
+                    "mode": "payment",
+                    "metadata": {"plan_id": "credits_100"},
+                }
+            },
+        }
+        with patch(
+            "app.services.stripe_service.stripe.Webhook.construct_event",
+            side_effect=Exception("bad signature"),
+        ):
+            response = await client.post(
+                "/api/webhook",
+                content=json.dumps(webhook_event).encode("utf-8"),
+                headers={
+                    "Content-Type": "application/json",
+                    "stripe-signature": "t=1,v1=forged",
+                },
+            )
+        assert response.status_code == 400

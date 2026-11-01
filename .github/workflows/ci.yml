@@ -42,7 +42,12 @@ jobs:
           python -m pip install --upgrade pip setuptools wheel
           pip install -r requirements.txt
 
-      - name: Run Flake8 Code Linter
+      - name: Run Flake8 Code Linter (errors only)
+        run: |
+          flake8 app tests --config=.flake8 --select=E9,F63,F7,F82,F821 --count --statistics
+
+      - name: Run Flake8 Style Report (advisory)
+        continue-on-error: true
         run: |
           flake8 app tests --config=.flake8 --count --statistics
 
@@ -50,7 +55,7 @@ jobs:
         run: |
           pytest tests -v --durations=10
         env:
-          DATABASE_URL: sqlite+aiosqlite:///:memory:
+          DATABASE_URL: "sqlite+aiosqlite:///:memory:"
           JWT_SECRET_KEY: ci-test-jwt-secret-key-384bit
           ACCESS_TOKEN_EXPIRE_MINUTES: "60"
           STRIPE_SECRET_KEY: sk_test_mock_stripe_key

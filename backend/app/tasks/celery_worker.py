@@ -2,7 +2,7 @@ import os
 import uuid
 import asyncio
 import logging
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from celery import Celery
 from sqlalchemy import select
 
@@ -21,8 +21,37 @@ logger = logging.getLogger("plagiarism.celery")
 # Broker & Result Backend Configuration
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL", REDIS_URL)
-CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", REDIS_URL)
 CELERY_ALWAYS_EAGER = os.getenv("CELERY_ALWAYS_EAGER", "false").lower() == "true"
+
+# In eager mode there is no worker and usually no Redis on single-service hosts
+# (e.g. Render free tier). Use the in-process memory backend so progress updates
+# never attempt a network connection, and keep our own result store for
+# deterministic success/failure reporting.
+CELERY_RESULT_BACKEND = os.getenv(
+    "CELERY_RESULT_BACKEND",
+    "cache+memory://" if CELERY_ALWAYS_EAGER else REDIS_URL,
+)
+if CELERY_ALWAYS_EAGER and CELERY_RESULT_BACKEND == REDIS_URL:
+    CELERY_RESULT_BACKEND = "cache+memory://"
+
+# Bounded in-process registry of completed eager tasks: task_id -> result payload.
+# Keeps polling (/api/task-status) working without a reachable result backend.
+EAGER_TASK_STORE: Dict[str, Dict[str, Any]] = {}
+EAGER_TASK_STORE_LIMIT = 100
+
+
+def record_eager_result(
+    task_id: Optional[str],
+    state: str,
+    result: Optional[Dict[str, Any]] = None,
+    error: Optional[str] = None,
+) -> None:
+    """Record the terminal state of an eagerly executed task."""
+    if not task_id:
+        return
+    if len(EAGER_TASK_STORE) >= EAGER_TASK_STORE_LIMIT:
+        EAGER_TASK_STORE.pop(next(iter(EAGER_TASK_STORE)), None)
+    EAGER_TASK_STORE[task_id] = {"state": state, "result": result, "error": error}
 
 celery_app = Celery(
     "plagiarism_tasks",
@@ -40,7 +69,8 @@ celery_app.conf.update(
     result_expires=3600,  # Cache results in Redis for 1 hour
     task_acks_late=True,
     worker_prefetch_multiplier=1,
-    task_always_eager=CELERY_ALWAYS_EAGER
+    task_always_eager=CELERY_ALWAYS_EAGER,
+    task_store_eager_result=CELERY_ALWAYS_EAGER
 )
 
 # Shared worker singletons
@@ -83,7 +113,8 @@ def process_plagiarism_document(
       5. Evaluates hybrid N-gram Jaccard and dense cosine similarity
       6. Persists originality report to PostgreSQL and deducts user credit
     """
-    logger.info(f"Task {self.request.id}: Started asynchronous audit for {filename} (User: {user_id})")
+    task_id = self.request.id
+    logger.info(f"Task {task_id}: Started asynchronous audit for {filename} (User: {user_id})")
 
     try:
         # Step 1: Text extraction & OCR fallback
@@ -96,7 +127,7 @@ def process_plagiarism_document(
             }
         )
 
-        extraction_result = _ingestion_pipeline.extract(temp_file_path)
+        extraction_result = _ingestion_pipeline.ingest_document(temp_file_path)
         chunks = extraction_result.chunks
         chunk_strings = [c.text for c in chunks]
 
@@ -204,11 +235,15 @@ def process_plagiarism_document(
 
         asyncio.run(persist_db())
 
-        logger.info(f"Task {self.request.id}: Successfully processed {filename} (Score: {final_payload['overall_score']}%)")
+        logger.info(f"Task {task_id}: Successfully processed {filename} (Score: {final_payload['overall_score']}%)")
+        if CELERY_ALWAYS_EAGER:
+            record_eager_result(task_id, "SUCCESS", result=final_payload)
         return final_payload
 
     except Exception as e:
-        logger.error(f"Task {self.request.id} failed: {e}", exc_info=True)
+        logger.error(f"Task {task_id} failed: {e}", exc_info=True)
+        if CELERY_ALWAYS_EAGER:
+            record_eager_result(task_id, "FAILURE", error=str(e))
         raise e
     finally:
         # Cleanup temporary uploaded file on disk
