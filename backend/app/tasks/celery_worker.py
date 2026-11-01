@@ -9,8 +9,8 @@ from sqlalchemy import select
 from app.models.db_models import User, ScanHistory
 from app.services.database import AsyncSessionLocal
 from app.services.ingestion_pipeline import DocumentExtractionPipeline
+from app.services.knowledge_base import vector_db, seed_reference_corpus
 from app.services.core_engine import (
-    InternalVectorDB,
     LiveWebSearchClient,
     CoreNLPMatcher,
     PlagiarismDetectionEngine
@@ -136,10 +136,10 @@ celery_app.conf.update(
 # Shared worker singletons
 try:
     _ingestion_pipeline = DocumentExtractionPipeline(chunk_size=50, chunk_overlap=20, enable_ocr=True)
-    _vector_db = InternalVectorDB(
-        qdrant_url=os.getenv("QDRANT_URL") if os.getenv("QDRANT_URL") else None,
-        location=":memory:" if not os.getenv("QDRANT_URL") else None
-    )
+    # Use the process-wide corpus so the task compares documents against the
+    # reference papers seeded by the API instead of an empty private store.
+    _vector_db = vector_db
+    seed_reference_corpus()
     _web_client = LiveWebSearchClient()
     _nlp_matcher = CoreNLPMatcher()
     _plagiarism_engine = PlagiarismDetectionEngine(

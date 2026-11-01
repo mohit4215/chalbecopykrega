@@ -61,3 +61,27 @@ def test_index_and_query_round_trip(hashed_db):
 
     assert len(hits) == 1
     assert hits[0]["source_id"] == "doc_ref"
+
+
+def test_task_runner_shares_the_api_corpus():
+    """The Celery task must query the same store the API seeds on startup."""
+    from app.services import knowledge_base
+    from app.tasks import celery_worker
+
+    assert celery_worker._vector_db is knowledge_base.vector_db
+
+
+def test_seeded_corpus_matches_known_reference_text():
+    from app.services.knowledge_base import seed_reference_corpus, vector_db
+
+    seed_reference_corpus()
+    text = (
+        "Attention Is All You Need introduced the Transformer architecture based "
+        "solely on attention mechanisms, dispensing with recurrence and "
+        "convolutions entirely."
+    )
+    query = vector_db.generate_embeddings([text])[0]
+    hits = vector_db.query_similar_chunks(query, top_k=3, threshold=0.5)
+
+    assert hits, "the seeded reference corpus should be searchable"
+    assert any(hit["source_id"] == "doc_ref_cs101_sample" for hit in hits)

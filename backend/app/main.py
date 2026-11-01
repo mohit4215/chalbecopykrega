@@ -37,11 +37,11 @@ from app.services.ingestion_pipeline import (
     EmptyDocumentError
 )
 from app.services.core_engine import (
-    InternalVectorDB,
     LiveWebSearchClient,
     CoreNLPMatcher,
     PlagiarismDetectionEngine
 )
+from app.services.knowledge_base import vector_db, seed_reference_corpus
 from app.services.security import (
     validate_secure_file_upload,
     SecurityHeadersMiddleware,
@@ -225,7 +225,6 @@ class TaskStatusResponse(BaseModel):
 # ------------------------------------------------------------------------------
 
 ingestion_pipeline = DocumentExtractionPipeline(chunk_size=50, chunk_overlap=20, enable_ocr=True)
-vector_db = InternalVectorDB(location=":memory:")
 web_search_client = LiveWebSearchClient()
 nlp_matcher = CoreNLPMatcher()
 plagiarism_engine = PlagiarismDetectionEngine(
@@ -298,20 +297,7 @@ async def on_startup():
     await seed_default_users()
 
     # Pre-seed internal database with reference papers
-    try:
-        sample_text_chunks = [
-            "Deep learning is a subset of machine learning, which is essentially a neural network with three or more layers. These neural networks attempt to simulate the behavior of the human brain.",
-            "Attention Is All You Need introduced the Transformer architecture based solely on attention mechanisms, dispensing with recurrence and convolutions entirely.",
-            "Convolutional neural networks are commonly used for image classification, while transformers have revolutionized natural language processing."
-        ]
-        vector_db.index_submission(
-            document_id="doc_ref_cs101_sample",
-            student_name="Alice Johnson (Spring 2025)",
-            title="Introduction to Neural Architectures and Attention Mechanisms",
-            chunks=sample_text_chunks
-        )
-    except Exception:
-        pass
+    seed_reference_corpus()
 
 # ------------------------------------------------------------------------------
 # Authentication Routes (Protected by IP Rate Limiting: 10 req/min)
