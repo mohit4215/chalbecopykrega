@@ -29,6 +29,8 @@ import RegisterForm from './components/RegisterForm';
 import AdminDashboard from './components/admin/AdminDashboard';
 import CookieConsent from './components/CookieConsent';
 import PrivacySettings from './components/PrivacySettings';
+import SupportChatWidget from './components/SupportChatWidget';
+import FlagModal from './components/FlagModal';
 
 function MainApp() {
   const { user, isAuthenticated, logout, updateUserCredits, refreshUser, authFetch } = useAuth();
@@ -38,6 +40,7 @@ function MainApp() {
   const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
   const [selectedMatch, setSelectedMatch] = useState(null);
   const [isDiffOpen, setIsDiffOpen] = useState(false);
+  const [flaggingMatch, setFlaggingMatch] = useState(null);
   const [authModal, setAuthModal] = useState(null); // null | 'login' | 'register'
 
   useEffect(() => {
@@ -62,6 +65,10 @@ function MainApp() {
   const handleOpenDiff = (match) => {
     setSelectedMatch(match);
     setIsDiffOpen(true);
+  };
+
+  const handleFlagMatch = (match) => {
+    setFlaggingMatch(match);
   };
 
   const handlePrint = () => {
@@ -431,6 +438,7 @@ function MainApp() {
                     selectedMatchId={selectedMatch?.id}
                     onSelectMatch={(m) => setSelectedMatch(m)}
                     onOpenDiff={handleOpenDiff}
+                    onFlagMatch={handleFlagMatch}
                   />
                 </div>
               </div>
@@ -444,6 +452,15 @@ function MainApp() {
         match={selectedMatch}
         isOpen={isDiffOpen}
         onClose={() => setIsDiffOpen(false)}
+        onFlagMatch={handleFlagMatch}
+      />
+
+      {/* Flag Incorrect Match / False Positive Modal */}
+      <FlagModal
+        match={flaggingMatch}
+        report={report}
+        isOpen={!!flaggingMatch}
+        onClose={() => setFlaggingMatch(null)}
       />
 
       {/* Auth Modal (Login / Register) */}
@@ -481,6 +498,7 @@ export default function App() {
     <AuthProvider>
       <MainApp />
       <CookieConsent />
+      <SupportChatWidget />
     </AuthProvider>
   );
 }

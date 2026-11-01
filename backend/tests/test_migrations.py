@@ -21,6 +21,7 @@ def test_alembic_config_and_metadata():
     table_names = list(Base.metadata.tables.keys())
     assert "users" in table_names
     assert "scan_history" in table_names
+    assert "feedback" in table_names
 
 
 def test_backup_and_restore_scripts_exist_and_executable():

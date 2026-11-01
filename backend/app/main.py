@@ -3,6 +3,7 @@ import uuid
 import tempfile
 import shutil
 import io
+import math
 import logging
 from typing import Optional, List, Dict, Any
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Depends, Request, Header, Query, status, BackgroundTasks, WebSocket, WebSocketDisconnect
@@ -17,7 +18,7 @@ import functools
 from jose import jwt, JWTError
 
 from app.config import settings
-from app.models.db_models import User, ScanHistory
+from app.models.db_models import User, ScanHistory, Feedback
 from app.services.database import get_db_session, init_db
 from app.services.auth import (
     hash_password,
@@ -225,6 +226,46 @@ class TaskStatusResponse(BaseModel):
     message: Optional[str] = None
     report: Optional[Dict[str, Any]] = None
     error: Optional[str] = None
+
+# ------------------------------------------------------------------------------
+# Feedback & False-Positive Schemas
+# ------------------------------------------------------------------------------
+
+class FeedbackCreateRequest(BaseModel):
+    chunk_text: str = Field(..., min_length=1, description="Flagged text chunk from submitted document")
+    matched_source_url: Optional[str] = Field(None, description="URL of reference source matched by engine")
+    source_title: Optional[str] = Field(None, description="Title or name of reference source")
+    similarity_score: Optional[float] = Field(None, ge=0.0, le=1.0, description="Calculated similarity score")
+    reason: Optional[str] = Field("false_positive", description="Flag reason (e.g. false_positive, common_phrase, quotation_missed, public_domain, other)")
+    comment: Optional[str] = Field(None, description="User's explanation or critique of why the match is incorrect")
+    scan_id: Optional[str] = Field(None, description="Identifier of associated scan or document")
+    filename: Optional[str] = Field(None, description="Document filename")
+
+class FeedbackResponse(BaseModel):
+    id: str
+    user_id: Optional[str] = None
+    user_email: Optional[str] = None
+    scan_id: Optional[str] = None
+    filename: Optional[str] = None
+    chunk_text: str
+    matched_source_url: Optional[str] = None
+    source_title: Optional[str] = None
+    similarity_score: Optional[float] = None
+    reason: str
+    comment: Optional[str] = None
+    status: str
+    admin_notes: Optional[str] = None
+    created_at: Optional[str] = None
+
+class FeedbackAdminUpdateRequest(BaseModel):
+    status: Optional[str] = Field(None, description="Status: 'pending', 'reviewed', 'resolved', 'dismissed'")
+    admin_notes: Optional[str] = Field(None, description="Internal notes for NLP tuning and threshold adjustment")
+
+class FeedbackListResponse(BaseModel):
+    feedbacks: List[FeedbackResponse]
+    total: int
+    page: int
+    pages: int
 
 # ------------------------------------------------------------------------------
 # Singletons & Startup Lifecycle
@@ -945,6 +986,186 @@ async def export_pdf_report(
             "Content-Disposition": content_disp,
             "Content-Type": "application/pdf"
         }
+    )
+
+# ------------------------------------------------------------------------------
+# Feedback & False-Positive Reporting Endpoints
+# ------------------------------------------------------------------------------
+
+@app.post(
+    "/api/feedback",
+    response_model=FeedbackResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Submit user feedback or flag a false-positive match"
+)
+async def submit_feedback(
+    payload: FeedbackCreateRequest,
+    current_user: Optional[User] = Depends(get_optional_current_user),
+    db: AsyncSession = Depends(get_db_session)
+):
+    """
+    Captures user-flagged false positive matches, citation misclassifications,
+    and threshold feedback to enable continuous tuning of NLP models.
+    """
+    feedback_entry = Feedback(
+        id=str(uuid.uuid4()),
+        user_id=current_user.id if current_user else None,
+        scan_id=payload.scan_id,
+        filename=payload.filename,
+        chunk_text=payload.chunk_text.strip(),
+        matched_source_url=payload.matched_source_url.strip() if payload.matched_source_url else None,
+        source_title=payload.source_title.strip() if payload.source_title else None,
+        similarity_score=payload.similarity_score,
+        reason=payload.reason or "false_positive",
+        comment=payload.comment.strip() if payload.comment else None,
+        status="pending"
+    )
+    db.add(feedback_entry)
+    await db.commit()
+    await db.refresh(feedback_entry)
+
+    logger.info(
+        f"[Feedback Captured] ID={feedback_entry.id} User={current_user.email if current_user else 'guest'} "
+        f"Reason={feedback_entry.reason} Similarity={feedback_entry.similarity_score} "
+        f"Source={feedback_entry.matched_source_url or 'N/A'}"
+    )
+
+    return FeedbackResponse(
+        id=feedback_entry.id,
+        user_id=feedback_entry.user_id,
+        user_email=current_user.email if current_user else None,
+        scan_id=feedback_entry.scan_id,
+        filename=feedback_entry.filename,
+        chunk_text=feedback_entry.chunk_text,
+        matched_source_url=feedback_entry.matched_source_url,
+        source_title=feedback_entry.source_title,
+        similarity_score=feedback_entry.similarity_score,
+        reason=feedback_entry.reason,
+        comment=feedback_entry.comment,
+        status=feedback_entry.status,
+        admin_notes=feedback_entry.admin_notes,
+        created_at=feedback_entry.created_at.isoformat() if feedback_entry.created_at else None
+    )
+
+@app.get(
+    "/api/admin/feedback",
+    response_model=FeedbackListResponse,
+    summary="List submitted feedback and false positives for NLP calibration (Admin Only)"
+)
+async def get_admin_feedbacks(
+    status_filter: Optional[str] = Query(None, alias="status"),
+    reason_filter: Optional[str] = Query(None, alias="reason"),
+    page: int = Query(1, ge=1),
+    limit: int = Query(25, ge=1, le=100),
+    admin_user: User = Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db_session)
+):
+    """
+    Superadmin view of flagged matches, allowing ML engineers & Product Managers
+    to evaluate model false-positive rates and tune similarity thresholds.
+    """
+    query = select(Feedback).outerjoin(User, Feedback.user_id == User.id)
+    if status_filter:
+        query = query.where(Feedback.status == status_filter)
+    if reason_filter:
+        query = query.where(Feedback.reason == reason_filter)
+
+    # Count total
+    count_query = select(func.count(Feedback.id))
+    if status_filter:
+        count_query = count_query.where(Feedback.status == status_filter)
+    if reason_filter:
+        count_query = count_query.where(Feedback.reason == reason_filter)
+
+    total_count = (await db.execute(count_query)).scalar() or 0
+
+    offset = (page - 1) * limit
+    paginated_query = query.order_by(desc(Feedback.created_at)).offset(offset).limit(limit)
+    res = await db.execute(paginated_query)
+    feedbacks = res.scalars().all()
+
+    items = []
+    for f in feedbacks:
+        items.append(FeedbackResponse(
+            id=f.id,
+            user_id=f.user_id,
+            user_email=f.user.email if f.user else None,
+            scan_id=f.scan_id,
+            filename=f.filename,
+            chunk_text=f.chunk_text,
+            matched_source_url=f.matched_source_url,
+            source_title=f.source_title,
+            similarity_score=f.similarity_score,
+            reason=f.reason,
+            comment=f.comment,
+            status=f.status,
+            admin_notes=f.admin_notes,
+            created_at=f.created_at.isoformat() if f.created_at else None
+        ))
+
+    pages = max(1, math.ceil(total_count / limit))
+    return FeedbackListResponse(
+        feedbacks=items,
+        total=total_count,
+        page=page,
+        pages=pages
+    )
+
+@app.patch(
+    "/api/admin/feedback/{feedback_id}",
+    response_model=FeedbackResponse,
+    summary="Update feedback review status and NLP tuning notes (Admin Only)"
+)
+async def update_admin_feedback(
+    feedback_id: str,
+    payload: FeedbackAdminUpdateRequest,
+    admin_user: User = Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db_session)
+):
+    """
+    Update the triage status and ML tuning notes for a flagged match.
+    """
+    query = select(Feedback).where(Feedback.id == feedback_id)
+    res = await db.execute(query)
+    feedback_entry = res.scalar_one_or_none()
+    if not feedback_entry:
+        raise HTTPException(status_code=404, detail="Feedback entry not found.")
+
+    if payload.status:
+        valid_statuses = ["pending", "reviewed", "resolved", "dismissed"]
+        if payload.status not in valid_statuses:
+            raise HTTPException(status_code=400, detail=f"Invalid status. Must be one of {valid_statuses}")
+        feedback_entry.status = payload.status
+
+    if payload.admin_notes is not None:
+        feedback_entry.admin_notes = payload.admin_notes
+
+    await db.commit()
+    await db.refresh(feedback_entry)
+
+    # Load associated user email if present
+    user_email = None
+    if feedback_entry.user_id:
+        user_res = await db.execute(select(User).where(User.id == feedback_entry.user_id))
+        u = user_res.scalar_one_or_none()
+        if u:
+            user_email = u.email
+
+    return FeedbackResponse(
+        id=feedback_entry.id,
+        user_id=feedback_entry.user_id,
+        user_email=user_email,
+        scan_id=feedback_entry.scan_id,
+        filename=feedback_entry.filename,
+        chunk_text=feedback_entry.chunk_text,
+        matched_source_url=feedback_entry.matched_source_url,
+        source_title=feedback_entry.source_title,
+        similarity_score=feedback_entry.similarity_score,
+        reason=feedback_entry.reason,
+        comment=feedback_entry.comment,
+        status=feedback_entry.status,
+        admin_notes=feedback_entry.admin_notes,
+        created_at=feedback_entry.created_at.isoformat() if feedback_entry.created_at else None
     )
 
 # ------------------------------------------------------------------------------
