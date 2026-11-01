@@ -5,7 +5,7 @@ import shutil
 import io
 import logging
 from typing import Optional, List, Dict, Any
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Depends, Request, Header, Query, status, BackgroundTasks
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Depends, Request, Header, Query, status, BackgroundTasks, WebSocket, WebSocketDisconnect
 from fastapi.responses import StreamingResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime, timezone, timedelta
@@ -14,6 +14,7 @@ from sqlalchemy import select, func, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.concurrency import run_in_threadpool
 import functools
+from jose import jwt, JWTError
 
 from app.config import settings
 from app.models.db_models import User, ScanHistory
@@ -24,8 +25,11 @@ from app.services.auth import (
     create_access_token,
     get_current_user,
     get_optional_current_user,
-    get_admin_user
+    get_admin_user,
+    SECRET_KEY,
+    ALGORITHM
 )
+from app.services.task_stream import subscribe_task_events, publish_task_event
 from app.services.stripe_service import StripeService, PLANS
 from app.services.pdf_generator import PDFReportGenerator
 from app.services.ingestion_pipeline import (
@@ -512,12 +516,15 @@ async def check_plagiarism_async(
 
     # In-process asynchronous execution via FastAPI BackgroundTasks
     task_id = f"task_{uuid.uuid4().hex[:16]}"
-    record_eager_result(
+    publish_task_event(
         task_id=task_id,
-        state="PROGRESS",
-        step="extracting",
-        progress=15,
-        message="Document queued. Commencing text extraction & OCR analysis...",
+        event={
+            "task_id": task_id,
+            "status": "processing",
+            "step": "extracting",
+            "progress": 15,
+            "message": "Document queued. Commencing text extraction & OCR analysis...",
+        }
     )
 
     def run_scan_job():
@@ -533,7 +540,17 @@ async def check_plagiarism_async(
             )
         except Exception as exc:
             logger.error(f"Background task {task_id} failed: {exc}", exc_info=True)
-            record_eager_result(task_id, "FAILURE", error=str(exc))
+            publish_task_event(
+                task_id=task_id,
+                event={
+                    "task_id": task_id,
+                    "status": "failure",
+                    "step": "failed",
+                    "progress": 0,
+                    "message": str(exc),
+                    "error": str(exc),
+                }
+            )
 
     background_tasks.add_task(run_scan_job)
 
@@ -648,6 +665,62 @@ async def get_task_status(
             progress=50,
             message="Processing document..."
         )
+
+# ------------------------------------------------------------------------------
+# WebSocket Real-Time Task Streaming (Redis Pub/Sub & In-Process Event Stream)
+# ------------------------------------------------------------------------------
+
+@app.websocket("/ws/task-status/{task_id}")
+@app.websocket("/api/ws/task-status/{task_id}")
+async def websocket_task_status(
+    websocket: WebSocket,
+    task_id: str,
+    token: Optional[str] = Query(None)
+):
+    """
+    WebSocket Endpoint: Live Task Progress Streaming
+    Streams real-time status events ('extracting', 'vectorizing', 'searching_web', 'scoring', 'completed')
+    directly from Celery workers via Redis Pub/Sub without HTTP polling.
+    """
+    await websocket.accept()
+    logger.info(f"WebSocket client connected for task: {task_id}")
+
+    # Optional authentication verification via JWT token query param
+    if token:
+        try:
+            payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+            user_email = payload.get("sub")
+            if not user_email:
+                await websocket.send_json({"task_id": task_id, "status": "failure", "error": "Invalid auth token."})
+                await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+                return
+        except JWTError as jwt_err:
+            await websocket.send_json({"task_id": task_id, "status": "failure", "error": f"Authentication failed: {str(jwt_err)}"})
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+            return
+
+    try:
+        async for event in subscribe_task_events(task_id):
+            await websocket.send_json(event)
+            if event.get("status") in ("success", "failure"):
+                break
+    except WebSocketDisconnect:
+        logger.info(f"WebSocket disconnected by client for task {task_id}")
+    except Exception as exc:
+        logger.error(f"Error in task streaming WebSocket for {task_id}: {exc}", exc_info=True)
+        try:
+            await websocket.send_json({
+                "task_id": task_id,
+                "status": "failure",
+                "error": f"Stream error: {str(exc)}"
+            })
+        except Exception:
+            pass
+    finally:
+        try:
+            await websocket.close()
+        except Exception:
+            pass
 
 # ------------------------------------------------------------------------------
 # History & PDF Export Endpoints
