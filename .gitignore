@@ -38,6 +38,12 @@ yarn-error.log*
 .jwt_secret
 backend/.jwt_secret
 
+# Database & Local Files
+*.db
+*.sqlite3
+*.sqlite
+backend/*.db
+
 # IDEs & System Files
 .vscode/
 .idea/
