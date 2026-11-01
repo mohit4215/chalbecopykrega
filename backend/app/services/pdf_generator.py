@@ -111,11 +111,13 @@ class PDFReportGenerator:
         # Generate styled source table rows
         source_rows = []
         for idx, m in enumerate(matches, 1):
-            pct = int(m.get("similarity_score", 0) * 100)
-            m_type = m.get("match_type", "exact_copy").replace("_", " ").upper()
-            title = html.escape(m.get("source_title", "Unknown Source"))
+            pct = int((m.get("similarity_score") or 0) * 100)
+            raw_match_type = m.get("match_type") or "exact_copy"
+            m_type = str(raw_match_type).replace("_", " ").upper()
+            title = html.escape(str(m.get("source_title") or "Unknown Source"))
             url = m.get("source_url")
-            link_html = f'<a href="{url}" style="color: #4f46e5; text-decoration: none;">{html.escape(url[:55])}...</a>' if url else f'<span style="color: #64748b;">ID: {html.escape(m.get("source_id", "Internal DB"))}</span>'
+            source_id_str = str(m.get("source_id") or "Internal DB")
+            link_html = f'<a href="{url}" style="color: #4f46e5; text-decoration: none;">{html.escape(str(url)[:55])}...</a>' if url else f'<span style="color: #64748b;">ID: {html.escape(source_id_str)}</span>'
 
             source_rows.append(f"""
             <tr style="border-bottom: 1px solid #e2e8f0; font-size: 11px;">
@@ -427,9 +429,9 @@ class PDFReportGenerator:
         for i, m in enumerate(matches, 1):
             table_data.append([
                 str(i),
-                m.get("source_title", "Unknown")[:40],
-                m.get("match_type", "").upper(),
-                f"{int(m.get('similarity_score', 0) * 100)}%"
+                str(m.get("source_title") or "Unknown")[:40],
+                str(m.get("match_type") or "").upper(),
+                f"{int((m.get('similarity_score') or 0) * 100)}%"
             ])
 
         t = Table(table_data, colWidths=[30, 260, 100, 80])
@@ -443,7 +445,7 @@ class PDFReportGenerator:
 
         # Full Document Text
         elements.append(Paragraph("<b>Document Text</b>", styles["Heading2"]))
-        elements.append(Paragraph(report_data.get("full_text", "").replace("\n", "<br/>"), styles["BodyText"]))
+        elements.append(Paragraph((report_data.get("full_text") or "").replace("\n", "<br/>"), styles["BodyText"]))
 
         doc.build(elements)
         return pdf_buffer.getvalue()
