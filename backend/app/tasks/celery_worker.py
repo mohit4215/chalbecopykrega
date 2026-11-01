@@ -19,20 +19,32 @@ from app.services.core_engine import (
 logger = logging.getLogger("plagiarism.celery")
 
 # Broker & Result Backend Configuration
-REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
-CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL", REDIS_URL)
-CELERY_ALWAYS_EAGER = os.getenv("CELERY_ALWAYS_EAGER", "false").lower() == "true"
+#
+# Single-service hosts (Render free tier, a plain `uvicorn` process, Docker
+# without a worker) have no Redis. In that case tasks must run in-process.
+# Defaulting to eager whenever no broker URL is configured keeps those
+# deployments working without requiring dashboard environment variables, while
+# docker-compose / production setups that set REDIS_URL still use the worker.
+REDIS_URL = (os.getenv("REDIS_URL") or "").strip()
+CELERY_BROKER_URL = (os.getenv("CELERY_BROKER_URL") or "").strip() or REDIS_URL
 
-# In eager mode there is no worker and usually no Redis on single-service hosts
-# (e.g. Render free tier). Use the in-process memory backend so progress updates
-# never attempt a network connection, and keep our own result store for
-# deterministic success/failure reporting.
-CELERY_RESULT_BACKEND = os.getenv(
-    "CELERY_RESULT_BACKEND",
-    "cache+memory://" if CELERY_ALWAYS_EAGER else REDIS_URL,
-)
-if CELERY_ALWAYS_EAGER and CELERY_RESULT_BACKEND == REDIS_URL:
-    CELERY_RESULT_BACKEND = "cache+memory://"
+_eager_flag = os.getenv("CELERY_ALWAYS_EAGER")
+if _eager_flag is None or not _eager_flag.strip():
+    CELERY_ALWAYS_EAGER = not CELERY_BROKER_URL
+else:
+    CELERY_ALWAYS_EAGER = _eager_flag.strip().lower() in {"1", "true", "yes", "on"}
+
+# With no broker, use Celery's in-memory transport instead of silently
+# defaulting to a localhost Redis that does not exist.
+if not CELERY_BROKER_URL:
+    CELERY_BROKER_URL = "memory://"
+
+# In eager mode there is no worker and usually no Redis. Use the in-process
+# memory backend so progress updates never attempt a network connection, and
+# keep our own result store for deterministic success/failure reporting.
+CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", "").strip()
+if not CELERY_RESULT_BACKEND:
+    CELERY_RESULT_BACKEND = "cache+memory://" if CELERY_ALWAYS_EAGER else REDIS_URL
 
 # Bounded in-process registry of completed eager tasks: task_id -> result payload.
 # Keeps polling (/api/task-status) working without a reachable result backend.
@@ -53,6 +65,22 @@ def record_eager_result(
         EAGER_TASK_STORE.pop(next(iter(EAGER_TASK_STORE)), None)
     EAGER_TASK_STORE[task_id] = {"state": state, "result": result, "error": error}
 
+
+def report_progress(task, step: str, progress: int, message: str) -> None:
+    """Publish task progress without ever failing the scan.
+
+    Progress reporting is best-effort: without a reachable result backend (and
+    for tasks invoked directly or via ``apply()`` where ``request.id`` may be
+    absent) ``update_state`` raises. That must not abort a plagiarism scan.
+    """
+    try:
+        task.update_state(
+            state="PROGRESS",
+            meta={"step": step, "progress": progress, "message": message},
+        )
+    except Exception as exc:  # pragma: no cover - depends on backend availability
+        logger.debug(f"Progress update skipped ({step}): {exc}")
+
 celery_app = Celery(
     "plagiarism_tasks",
     broker=CELERY_BROKER_URL,
@@ -70,7 +98,39 @@ celery_app.conf.update(
     task_acks_late=True,
     worker_prefetch_multiplier=1,
     task_always_eager=CELERY_ALWAYS_EAGER,
-    task_store_eager_result=CELERY_ALWAYS_EAGER
+    task_store_eager_result=CELERY_ALWAYS_EAGER,
+    # Fail fast when a configured broker is unreachable: the endpoint then falls
+    # back to in-process execution instead of hanging for a minute on retries.
+    broker_connection_timeout=5,
+    broker_connection_max_retries=1,
+    broker_transport_options={
+        "max_retries": 1,
+        "interval_start": 0,
+        "interval_step": 0.2,
+        "interval_max": 0.5,
+        "socket_connect_timeout": 5,
+        "socket_timeout": 5,
+    },
+    task_publish_retry_policy={
+        "max_retries": 1,
+        "interval_start": 0,
+        "interval_step": 0.2,
+        "interval_max": 0.5,
+    },
+    # Same fail-fast behaviour for the Redis result backend, whose reconnect
+    # loop otherwise retries for ~60s when Redis is missing.
+    redis_socket_connect_timeout=5,
+    redis_socket_timeout=5,
+    result_backend_transport_options={
+        "retry_policy": {
+            "max_retries": 1,
+            "interval_start": 0,
+            "interval_step": 0.2,
+            "interval_max": 0.5,
+        },
+        "socket_connect_timeout": 5,
+        "socket_timeout": 5,
+    },
 )
 
 # Shared worker singletons
@@ -118,13 +178,11 @@ def process_plagiarism_document(
 
     try:
         # Step 1: Text extraction & OCR fallback
-        self.update_state(
-            state="PROGRESS",
-            meta={
-                "step": "extracting",
-                "progress": 20,
-                "message": "Extracting text and applying OCR fallback if scanned..."
-            }
+        report_progress(
+            self,
+            "extracting",
+            20,
+            "Extracting text and applying OCR fallback if scanned...",
         )
 
         extraction_result = _ingestion_pipeline.ingest_document(temp_file_path)
@@ -132,24 +190,20 @@ def process_plagiarism_document(
         chunk_strings = [c.text for c in chunks]
 
         # Step 2: Vector embeddings & similarity search
-        self.update_state(
-            state="PROGRESS",
-            meta={
-                "step": "vectorizing",
-                "progress": 55,
-                "message": "Generating embeddings and querying Qdrant vector database..."
-            }
+        report_progress(
+            self,
+            "vectorizing",
+            55,
+            "Generating embeddings and querying the vector database...",
         )
 
         # Step 3: Web search & scoring
         if enable_web_search:
-            self.update_state(
-                state="PROGRESS",
-                meta={
-                    "step": "searching_web",
-                    "progress": 75,
-                    "message": "Cross-referencing live internet sources via search APIs..."
-                }
+            report_progress(
+                self,
+                "searching_web",
+                75,
+                "Cross-referencing live internet sources via search APIs...",
             )
 
         doc_id = f"doc_{uuid.uuid4().hex[:10]}"
@@ -163,13 +217,11 @@ def process_plagiarism_document(
         )
 
         # Step 4: Formatting matches
-        self.update_state(
-            state="PROGRESS",
-            meta={
-                "step": "scoring",
-                "progress": 92,
-                "message": "Evaluating hybrid N-gram Jaccard & cosine similarity matrices..."
-            }
+        report_progress(
+            self,
+            "scoring",
+            92,
+            "Evaluating hybrid N-gram Jaccard & cosine similarity matrices...",
         )
 
         formatted_matches = []

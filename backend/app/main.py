@@ -513,20 +513,26 @@ async def check_plagiarism_async(
         )
         task_id = task.id
     except Exception as e:
-        logger.warning(f"Celery dispatch failed ({e}). Running task synchronously via eager fallback.")
+        logger.warning(f"Celery dispatch failed ({e}). Running task synchronously in-process.")
         try:
-            # Fallback to direct synchronous execution if Celery broker is offline
-            task_result = await run_in_threadpool(
+            # Execute the Celery task locally with a generated task id. Calling
+            # the task function directly would leave ``self.request.id`` unset,
+            # which breaks progress reporting on backends that key by task id.
+            sync_id = f"sync_{uuid.uuid4().hex[:12]}"
+            eager_result = await run_in_threadpool(
                 functools.partial(
-                    process_plagiarism_document,
-                    temp_file_path=temp_storage_path,
-                    filename=filename,
-                    user_id=current_user.id,
-                    enable_web_search=enable_web_search,
+                    process_plagiarism_document.apply,
+                    kwargs={
+                        "temp_file_path": temp_storage_path,
+                        "filename": filename,
+                        "user_id": current_user.id,
+                        "enable_web_search": enable_web_search,
+                    },
+                    task_id=sync_id,
                 )
             )
+            task_result = eager_result.get()
             # Keep the result available for the polling endpoint.
-            sync_id = f"sync_{uuid.uuid4().hex[:12]}"
             record_eager_result(sync_id, "SUCCESS", result=task_result)
             return TaskSubmissionResponse(
                 task_id=sync_id,
@@ -535,6 +541,7 @@ async def check_plagiarism_async(
                 filename=filename
             )
         except Exception as sync_err:
+            logger.error(f"Synchronous processing failed: {sync_err}", exc_info=True)
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Document processing failed: {str(sync_err)}"
