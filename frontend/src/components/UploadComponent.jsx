@@ -141,7 +141,8 @@ export default function UploadComponent({ onScanComplete, isLoading, setIsLoadin
     const rawEnv = (import.meta.env.VITE_API_URL || '').replace(/^https?:\/\//, '').replace(/\/+$/, '');
     const host = rawEnv || (window.location.hostname.includes('render.com') ? 'chalbecopykrega-api.onrender.com' : window.location.host);
 
-    const wsUrl = `${protocol}//${host}/ws/task-status/${taskId}`;
+    const tokenQuery = token ? `?token=${encodeURIComponent(token)}` : '';
+    const wsUrl = `${protocol}//${host}/ws/task-status/${taskId}${tokenQuery}`;
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
 

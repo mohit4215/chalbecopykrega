@@ -45,9 +45,11 @@ services:
     region: oregon
     plan: free
     autoDeploy: true
-    buildCommand: "cd frontend && npm install && npm run build"
+    buildCommand: "cd frontend && npm install --include=dev && npm run build"
     staticPublishPath: "./frontend/dist"
     envVars:
+      - key: NODE_VERSION
+        value: "20.18.0"
       - key: VITE_API_URL
         value: "https://chalbecopykrega-api.onrender.com"
     routes:
