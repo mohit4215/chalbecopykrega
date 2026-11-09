@@ -151,7 +151,7 @@ export default function SourcesSidebar({
 
               {/* Matched Snippet */}
               <p className="text-xs text-slate-600 dark:text-slate-300 italic line-clamp-2 bg-slate-50 dark:bg-slate-800/60 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800/80">
-                "{m.source_snippet || m.matched_text}"
+                &ldquo;{m.source_snippet || m.matched_text}&rdquo;
               </p>
 
               {/* Footer actions: Diff compare & Flag */}

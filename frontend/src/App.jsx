@@ -1,23 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ThemeProvider } from './context/ThemeContext';
 import { ToastProvider, useToast } from './components/ui/toast';
-import { 
-  ShieldCheck, 
-  ArrowLeft, 
-  Printer, 
-  History, 
-  UploadCloud, 
-  CreditCard, 
-  Sparkles, 
-  Zap, 
-  LogOut, 
-  X, 
-  Download, 
-  Loader2, 
-  Lock, 
-  HelpCircle 
-} from 'lucide-react';
+import { ShieldCheck, X } from 'lucide-react';
 
 import AppShell from './components/layout/AppShell';
 import UploadComponent from './components/UploadComponent';

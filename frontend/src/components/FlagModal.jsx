@@ -107,7 +107,7 @@ export default function FlagModal({ isOpen, onClose, match, report }) {
                 </span>
               </div>
               <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs font-serif text-slate-800 line-clamp-3 italic">
-                "{match.matched_text}"
+                &ldquo;{match.matched_text}&rdquo;
               </div>
             </div>
 

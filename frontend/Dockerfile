@@ -10,11 +10,11 @@ FROM node:20-alpine AS builder
 WORKDIR /app
 
 # Install dependencies (utilizes Docker layer caching)
-COPY package.json package-lock.json* ./
+COPY frontend/package.json frontend/package-lock.json* ./
 RUN npm install
 
 # Copy application source files
-COPY . .
+COPY frontend/ ./
 
 # Build production distribution bundle
 RUN npm run build
@@ -26,7 +26,7 @@ FROM nginx:1.25-alpine AS runner
 RUN rm -rf /usr/share/nginx/html/* /etc/nginx/conf.d/default.conf
 
 # Copy reverse proxy & SPA configuration
-COPY ../nginx/nginx.conf /etc/nginx/nginx.conf
+COPY nginx/nginx.conf /etc/nginx/nginx.conf
 
 # Copy compiled production artifacts from builder stage
 COPY --from=builder /app/dist /usr/share/nginx/html

@@ -127,7 +127,7 @@ export default function LoginForm({ onSwitchToRegister, onSuccess }) {
         </button>
 
         <p className="text-xs text-slate-500">
-          Don't have an account?{' '}
+          Don&apos;t have an account?{' '}
           <button
             type="button"
             onClick={onSwitchToRegister}

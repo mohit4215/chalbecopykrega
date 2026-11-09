@@ -90,7 +90,7 @@ export default function MatchList({
               </div>
 
               <p className="text-xs text-slate-500 italic line-clamp-2 bg-slate-100/60 p-1.5 rounded text-[11px]">
-                "{m.matched_text}"
+                &ldquo;{m.matched_text}&rdquo;
               </p>
 
               <div className="flex items-center justify-between mt-2 pt-1 border-t border-slate-100 text-[11px] text-slate-400">

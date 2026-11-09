@@ -83,6 +83,7 @@ def test_intra_document_batch_deduplication():
 
 def test_onnx_synthetic_model_inference_and_normalization(tmp_path):
     """Synthetic ONNX sentence embedding graph must execute in ONNX Runtime and output unit vectors."""
+    pytest.importorskip("onnx")
     onnx_file = str(tmp_path / "synthetic_minilm.onnx")
     build_synthetic_onnx_model(onnx_file, dim=384)
 
@@ -104,6 +105,7 @@ def test_onnx_synthetic_model_inference_and_normalization(tmp_path):
 
 def test_onnx_int8_dynamic_quantization_pipeline(tmp_path):
     """Dynamic INT8 quantization must produce a functional, smaller model."""
+    pytest.importorskip("onnx")
     from onnxruntime.quantization import quantize_dynamic, QuantType
 
     fp32_file = str(tmp_path / "model_fp32.onnx")

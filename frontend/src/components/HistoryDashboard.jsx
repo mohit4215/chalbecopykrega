@@ -156,7 +156,7 @@ export default function HistoryDashboard({ onSelectReport, onNewScan }) {
           </div>
           <h3 className="text-sm font-bold text-slate-800">No Past Scans Found</h3>
           <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
-            You haven't scanned any documents yet under this account.
+            You haven&apos;t scanned any documents yet under this account.
           </p>
           <button
             type="button"

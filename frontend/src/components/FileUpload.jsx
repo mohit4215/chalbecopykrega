@@ -237,7 +237,7 @@ export default function FileUpload({ onScanComplete, isLoading, setIsLoading }) 
               onChange={(e) => setExcludeQuotes(e.target.checked)}
               className="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4"
             />
-            <span>Exclude Direct Quoted Passages ("...")</span>
+            <span>Exclude Direct Quoted Passages (&quot;...&quot;)</span>
           </label>
           <label className="flex items-center gap-2.5 text-xs font-medium text-slate-700 cursor-pointer">
             <input
