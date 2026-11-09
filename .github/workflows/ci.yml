@@ -89,7 +89,7 @@ jobs:
         run: npm run lint
 
       - name: Execute Jest & React Testing Library Suite
-        run: npm test -- --ci --watchAll=false
+        run: npm run test:ci
 
       - name: Verify Production Vite Build
         run: npm run build
