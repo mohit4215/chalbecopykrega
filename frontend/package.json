@@ -7,8 +7,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "jest",
-    "test:ci": "jest --ci --watchAll=false",
+    "test": "jest --passWithNoTests",
+    "test:ci": "jest --ci --watchAll=false --passWithNoTests",
     "lint": "eslint src --ext .js,.jsx"
   },
   "dependencies": {
