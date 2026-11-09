@@ -1,10 +1,21 @@
 import os
+import sys
+from pathlib import Path
+
+# Ensure backend root is in sys.path regardless of how or where Python is invoked
+_backend_dir = str(Path(__file__).resolve().parent.parent)
+if _backend_dir not in sys.path:
+    sys.path.insert(0, _backend_dir)
+
+# Suppress harmless passlib / bcrypt 4.x metadata warning
+import logging
+logging.getLogger("passlib").setLevel(logging.ERROR)
+
 import uuid
 import tempfile
 import shutil
 import io
 import math
-import logging
 from typing import Optional, List, Dict, Any
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Depends, Request, Header, Query, status, BackgroundTasks, WebSocket, WebSocketDisconnect
 from fastapi.responses import StreamingResponse, Response, RedirectResponse
@@ -1424,11 +1435,6 @@ async def health_check():
         "stripe_configured": bool(os.getenv("STRIPE_SECRET_KEY"))
     }
 
-if __name__ == "__main__":
-    import uvicorn
-    port = int(os.environ.get("PORT", 8000))
-    uvicorn.run("app.main:app", host="0.0.0.0", port=port, reload=False)
-
 # Static files mount & root redirect fallback
 static_dist_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../frontend/dist"))
 if os.path.isdir(static_dist_path):
@@ -1442,3 +1448,8 @@ else:
         visiting the root of the API server automatically redirects to the frontend.
         """
         return RedirectResponse(url="https://chalbecopykrega-app.onrender.com", status_code=302)
+
+if __name__ == "__main__":
+    import uvicorn
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run("app.main:app", host="0.0.0.0", port=port, reload=False)

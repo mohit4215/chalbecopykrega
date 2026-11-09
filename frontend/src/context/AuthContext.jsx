@@ -46,6 +46,16 @@ export function AuthProvider({ children }) {
   }, []);
 
   const apiBase = (() => {
+    if (typeof window !== 'undefined') {
+      const hostname = window.location.hostname;
+      // If no explicit VITE_API_URL is configured and running on localhost:
+      if (!import.meta.env.VITE_API_URL && (hostname === 'localhost' || hostname === '127.0.0.1')) {
+        if (window.location.port === '8000') {
+          return ''; // Served directly by FastAPI
+        }
+        return 'http://127.0.0.1:8000'; // Vite dev server proxying to local backend
+      }
+    }
     let raw = (import.meta.env.VITE_API_URL || 'https://chalbecopykrega-api.onrender.com').trim();
     if (!raw.startsWith('http://') && !raw.startsWith('https://')) {
       raw = `https://${raw}`;
@@ -114,8 +124,9 @@ export function AuthProvider({ children }) {
   // Helper fetch function that automatically injects the Bearer JWT token
   const authFetch = async (url, options = {}) => {
     const headers = options.headers ? new Headers(options.headers) : new Headers();
-    if (token) {
-      headers.set('Authorization', `Bearer ${token}`);
+    const activeToken = token || (typeof window !== 'undefined' ? localStorage.getItem('originality_token') : null);
+    if (activeToken) {
+      headers.set('Authorization', `Bearer ${activeToken}`);
     }
     const cleanUrl = url.startsWith('/') ? url : `/${url}`;
     const fullUrl = (url.startsWith('http://') || url.startsWith('https://'))
@@ -123,7 +134,7 @@ export function AuthProvider({ children }) {
       : `${apiBase}${cleanUrl}`;
 
     const res = await fetch(fullUrl, { ...options, headers });
-    if (res.status === 401 && token) {
+    if (res.status === 401 && activeToken) {
       console.warn('[Auth] Server returned HTTP 401 Unauthorized. Clearing stale token.');
       logout();
     }
