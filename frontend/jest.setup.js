@@ -1,4 +1,4 @@
-import '@testing-library/jest-dom';
+require('@testing-library/jest-dom');
 
 // Polyfill window.matchMedia for JSDOM
 Object.defineProperty(window, 'matchMedia', {
