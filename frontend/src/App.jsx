@@ -26,7 +26,7 @@ import telemetry from './services/telemetry';
 import { Button } from './components/ui/button';
 
 function MainApp() {
-  const { user, isAuthenticated, logout, updateUserCredits, refreshUser, authFetch } = useAuth();
+  const { user, isAuthenticated, updateUserCredits, refreshUser, authFetch } = useAuth();
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState('scan'); // 'scan' | 'history' | 'report' | 'pricing' | 'billing' | 'privacy' | 'admin'
   const [report, setReport] = useState(null);

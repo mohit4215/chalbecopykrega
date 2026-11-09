@@ -1,18 +1,16 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { 
   CreditCard, 
   ExternalLink, 
   Zap, 
   ShieldCheck, 
-  Layers, 
-  Sparkles, 
   ArrowRight,
   AlertCircle 
 } from 'lucide-react';
 
 export default function BillingDashboard({ onNavigateToPricing }) {
-  const { user, authFetch, refreshUser } = useAuth();
+  const { user, authFetch } = useAuth();
   const [loadingPortal, setLoadingPortal] = useState(false);
   const [error, setError] = useState('');
 
