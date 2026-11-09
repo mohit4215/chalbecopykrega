@@ -6,7 +6,7 @@ module.exports = {
     '\\.(jpg|jpeg|png|gif|webp|svg)$': '<rootDir>/__mocks__/fileMock.js'
   },
   transform: {
-    '^.+\\.(js|jsx)$': 'babel-jest'
+    '^.+\\.(js|jsx)$': ['babel-jest', { configFile: './babel.config.cjs' }]
   },
   transformIgnorePatterns: [
     '/node_modules/(?!(framer-motion|lucide-react)/)'
