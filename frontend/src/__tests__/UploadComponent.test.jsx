@@ -25,11 +25,11 @@ describe('UploadComponent Unit & Asynchronous Polling Tests', () => {
       />
     );
 
-    expect(screen.getByText(/Drag and drop your file here/i)).toBeInTheDocument();
-    expect(screen.getByText(/Load Demo File/i)).toBeInTheDocument();
+    expect(screen.getByText(/Drag & drop your document here/i)).toBeInTheDocument();
+    expect(screen.getByText(/Load Demo Paper/i)).toBeInTheDocument();
   });
 
-  test('populates sample paper when clicking "Load Demo File"', async () => {
+  test('populates sample paper when clicking "Load Demo Paper"', async () => {
     render(
       <UploadComponent
         onScanComplete={jest.fn()}
@@ -38,7 +38,7 @@ describe('UploadComponent Unit & Asynchronous Polling Tests', () => {
       />
     );
 
-    const sampleButton = screen.getByRole('button', { name: /Load Demo File/i });
+    const sampleButton = screen.getByRole('button', { name: /Load Demo Paper/i });
     fireEvent.click(sampleButton);
 
     await waitFor(() => {
@@ -46,7 +46,7 @@ describe('UploadComponent Unit & Asynchronous Polling Tests', () => {
     });
   });
 
-  test('displays validation error if scan initiated without a file', async () => {
+  test('disables originality audit button if no file is selected', () => {
     render(
       <UploadComponent
         onScanComplete={jest.fn()}
@@ -55,10 +55,8 @@ describe('UploadComponent Unit & Asynchronous Polling Tests', () => {
       />
     );
 
-    const scanButton = screen.getByRole('button', { name: /Submit Document for Asynchronous Analysis/i });
-    fireEvent.click(scanButton);
-
-    expect(screen.getByText(/Please select or drop a document to scan/i)).toBeInTheDocument();
+    const scanButton = screen.getByRole('button', { name: /Run Originality Audit/i });
+    expect(scanButton).toBeDisabled();
   });
 
   test('submits document and starts asynchronous task polling until success', async () => {
@@ -105,11 +103,11 @@ describe('UploadComponent Unit & Asynchronous Polling Tests', () => {
     );
 
     // Select sample file
-    const sampleButton = screen.getByRole('button', { name: /Load Demo File/i });
+    const sampleButton = screen.getByRole('button', { name: /Load Demo Paper/i });
     fireEvent.click(sampleButton);
 
     // Click submit button
-    const scanButton = screen.getByRole('button', { name: /Submit Document for Asynchronous Analysis/i });
+    const scanButton = screen.getByRole('button', { name: /Run Originality Audit/i });
     fireEvent.click(scanButton);
 
     expect(mockSetIsLoading).toHaveBeenCalledWith(true);
