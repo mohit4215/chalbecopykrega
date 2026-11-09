@@ -31,28 +31,31 @@ global.IntersectionObserver = class IntersectionObserver {
 };
 
 // Global Mock for framer-motion in JSDOM
-jest.mock('framer-motion', () => ({
-  AnimatePresence: ({ children }) => children,
-  motion: new Proxy({}, {
-    get: (_, tag) => React.forwardRef((props, ref) => {
-      const {
-        animate,
-        initial,
-        exit,
-        transition,
-        whileHover,
-        whileTap,
-        whileFocus,
-        variants,
-        layout,
-        layoutId,
-        onAnimationComplete,
-        ...rest
-      } = props;
-      return React.createElement(tag, { ...rest, ref });
+jest.mock('framer-motion', () => {
+  const React = require('react');
+  return {
+    AnimatePresence: ({ children }) => children,
+    motion: new Proxy({}, {
+      get: (_, tag) => React.forwardRef((props, ref) => {
+        const {
+          animate,
+          initial,
+          exit,
+          transition,
+          whileHover,
+          whileTap,
+          whileFocus,
+          variants,
+          layout,
+          layoutId,
+          onAnimationComplete,
+          ...rest
+        } = props;
+        return React.createElement(tag, { ...rest, ref });
+      })
     })
-  })
-}));
+  };
+});
 
 // Global Mock for posthog-js in JSDOM
 jest.mock('posthog-js', () => ({

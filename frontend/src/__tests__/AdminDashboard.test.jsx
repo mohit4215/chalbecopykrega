@@ -85,7 +85,7 @@ describe('Admin Dashboard & RBAC Unit Tests', () => {
     expect(screen.getByText('150')).toBeInTheDocument();
     expect(screen.getByText('35 Pro Subscribers')).toBeInTheDocument();
     expect(screen.getByText('$665.00')).toBeInTheDocument();
-    expect(screen.getByText('55')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '55' })).toBeInTheDocument();
     expect(screen.getByText(/Daily Scan Volume/i)).toBeInTheDocument();
   });
 

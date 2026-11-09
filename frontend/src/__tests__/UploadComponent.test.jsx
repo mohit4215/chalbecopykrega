@@ -7,7 +7,9 @@ jest.mock('../context/AuthContext', () => ({
   useAuth: () => ({
     authFetch: mockAuthFetch,
     user: { email: 'student@stanford.edu', scan_credits: 5 },
-    isAuthenticated: true
+    isAuthenticated: true,
+    token: 'mock-valid-jwt-token',
+    loginAsDemo: jest.fn().mockResolvedValue({})
   })
 }));
 
@@ -42,7 +44,7 @@ describe('UploadComponent Unit & Asynchronous Polling Tests', () => {
     fireEvent.click(sampleButton);
 
     await waitFor(() => {
-      expect(screen.getByText('NLP_Research_Sample_Paper.txt')).toBeInTheDocument();
+      expect(screen.getByText('Sample_NLP_Survey_Paper.txt')).toBeInTheDocument();
     });
   });
 
@@ -130,8 +132,8 @@ describe('UploadComponent Unit & Asynchronous Polling Tests', () => {
     );
 
     expect(screen.getByText(/Pipeline Execution/i)).toBeInTheDocument();
-    expect(screen.getByText(/Text Extraction & OCR/i)).toBeInTheDocument();
-    expect(screen.getByText(/Vector Embedding & DB/i)).toBeInTheDocument();
-    expect(screen.getByText(/Similarity & NLP Scoring/i)).toBeInTheDocument();
+    expect(screen.getByText(/Extracting text & OCR/i)).toBeInTheDocument();
+    expect(screen.getByText(/Vectorizing & DB search/i)).toBeInTheDocument();
+    expect(screen.getByText(/Similarity & NLP scoring/i)).toBeInTheDocument();
   });
 });
