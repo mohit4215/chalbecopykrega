@@ -11,12 +11,6 @@
     "test:ci": "jest --ci --watchAll=false --passWithNoTests",
     "lint": "eslint src --ext .js,.jsx"
   },
-  "babel": {
-    "presets": [
-      ["@babel/preset-env", { "targets": { "node": "current" } }],
-      ["@babel/preset-react", { "runtime": "automatic" }]
-    ]
-  },
   "dependencies": {
     "clsx": "^2.1.0",
     "framer-motion": "^11.0.8",
