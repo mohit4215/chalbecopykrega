@@ -1415,11 +1415,12 @@ async def admin_delete_user(
     await db.commit()
     return {"status": "deleted", "user_id": user_id, "email": target_user.email}
 
+@app.get("/health")
 @app.get("/api/health")
 async def health_check():
     return {
         "status": "healthy",
-        "service": "Turnitin Plagiarism & Stripe Monetization API",
+        "service": "Poach Plagiarism Detection & Stripe Monetization API",
         "stripe_configured": bool(os.getenv("STRIPE_SECRET_KEY"))
     }
 

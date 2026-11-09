@@ -70,7 +70,7 @@ describe('Results Dashboard Component Tests', () => {
       render(
         <DocumentViewer
           fullText={fullText}
-          matches={sampleMatches}
+          matches={[sampleMatches[0]]}
           selectedMatchId={null}
           onSelectMatch={jest.fn()}
         />
@@ -97,9 +97,9 @@ describe('Results Dashboard Component Tests', () => {
       );
 
       expect(screen.getByText('Introduction to Deep Learning - MIT')).toBeInTheDocument();
-      expect(screen.getByText('95%')).toBeInTheDocument();
+      expect(screen.getByText(/95%\s*Overlap/i)).toBeInTheDocument();
       expect(screen.getByText('Attention Mechanisms in NLP')).toBeInTheDocument();
-      expect(screen.getByText('84%')).toBeInTheDocument();
+      expect(screen.getByText(/84%\s*Overlap/i)).toBeInTheDocument();
     });
 
     test('triggers onSelectMatch callback when a source item is clicked', () => {
