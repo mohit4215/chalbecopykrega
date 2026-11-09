@@ -211,7 +211,7 @@ export default function AdminFeedbackReview() {
 
               {/* Row 2: Flagged Text */}
               <div className="p-3 bg-rose-50/50 rounded-xl border border-rose-100 text-xs font-serif text-slate-800 italic">
-                "{f.chunk_text}"
+                &ldquo;{f.chunk_text}&rdquo;
               </div>
 
               {/* Row 3: Matched Source & User Comment */}
