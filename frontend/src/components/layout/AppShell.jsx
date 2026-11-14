@@ -17,7 +17,8 @@ import {
   Sparkles,
   ShieldCheck,
   User as UserIcon,
-  CheckCircle2
+  CheckCircle2,
+  Code2
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
@@ -43,6 +44,7 @@ export default function AppShell({
     { id: 'scan', label: 'New Scan', icon: UploadCloud, badge: null },
     { id: 'history', label: 'Scan History', icon: History, badge: null },
     { id: 'pricing', label: 'Pricing Plans', icon: Sparkles, badge: isPro ? 'Active' : 'Upgrade' },
+    { id: 'developers', label: 'Developer API', icon: Code2, badge: 'v1' },
     { id: 'billing', label: 'Billing & Invoices', icon: CreditCard, badge: null },
     { id: 'privacy', label: 'Data & Privacy', icon: Lock, badge: 'GDPR' },
   ];

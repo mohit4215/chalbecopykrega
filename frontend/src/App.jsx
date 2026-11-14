@@ -19,6 +19,7 @@ import RegisterForm from './components/RegisterForm';
 import AdminDashboard from './components/admin/AdminDashboard';
 import CookieConsent from './components/CookieConsent';
 import PrivacySettings from './components/PrivacySettings';
+import DeveloperApiDashboard from './components/DeveloperApiDashboard';
 import SupportChatWidget from './components/SupportChatWidget';
 import FlagModal from './components/FlagModal';
 import ProductTour from './components/ProductTour';
@@ -176,6 +177,8 @@ function MainApp() {
         />
       ) : activeTab === 'billing' && isAuthenticated ? (
         <BillingDashboard onNavigateToPricing={() => setActiveTab('pricing')} />
+      ) : activeTab === 'developers' && isAuthenticated ? (
+        <DeveloperApiDashboard />
       ) : activeTab === 'privacy' && isAuthenticated ? (
         <PrivacySettings />
       ) : activeTab === 'history' && isAuthenticated ? (
@@ -213,6 +216,7 @@ function MainApp() {
                 overallScore={report.overall_score}
                 originalityScore={report.originality_score}
                 summary={report.summary}
+                aiDetection={report.ai_detection}
               />
 
               <SourcesSidebar
@@ -225,7 +229,7 @@ function MainApp() {
             </div>
           </div>
         </div>
-      ) : !isAuthenticated && (activeTab === 'history' || activeTab === 'billing' || activeTab === 'privacy' || activeTab === 'admin') ? (
+      ) : !isAuthenticated && (activeTab === 'history' || activeTab === 'billing' || activeTab === 'privacy' || activeTab === 'admin' || activeTab === 'developers') ? (
         /* Protected Tab Sign In Prompt */
         <div className="my-auto py-12 max-w-xl mx-auto text-center space-y-4">
           <div className="w-16 h-16 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 rounded-3xl flex items-center justify-center mx-auto shadow-sm">

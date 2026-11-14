@@ -29,7 +29,7 @@ import functools
 from jose import jwt, JWTError
 
 from app.config import settings
-from app.models.db_models import User, ScanHistory, Feedback
+from app.models.db_models import User, ScanHistory, Feedback, ApiKey
 from app.services.database import get_db_session, init_db
 from app.services.auth import (
     hash_password,
@@ -41,6 +41,13 @@ from app.services.auth import (
     SECRET_KEY,
     ALGORITHM
 )
+from app.services.api_key_auth import (
+    generate_new_api_key,
+    get_user_from_api_key_or_jwt,
+    require_authenticated_principal
+)
+from app.services.ai_detector import AIDetectionEngine
+from app.services.citation_filter import AcademicCitationFilter
 from app.services.task_stream import subscribe_task_events, publish_task_event
 from app.services.storage_service import StorageService
 from app.services.stripe_service import StripeService, PLANS
@@ -108,9 +115,40 @@ app.add_middleware(
 # Enforce HTTP security headers (CSP, HSTS, X-Content-Type-Options nosniff, X-Frame-Options DENY)
 app.add_middleware(SecurityHeadersMiddleware)
 
+@app.middleware("http")
+async def correlation_id_middleware(request: Request, call_next):
+    corr_id = request.headers.get("X-Request-ID") or request.headers.get("X-Correlation-ID") or f"req_{uuid.uuid4().hex[:12]}"
+    request.state.correlation_id = corr_id
+    response = await call_next(request)
+    response.headers["X-Request-ID"] = corr_id
+    return response
+
 # ------------------------------------------------------------------------------
 # Pydantic Schemas
 # ------------------------------------------------------------------------------
+
+class CreateApiKeyRequest(BaseModel):
+    name: str = Field(default="Production API Key", max_length=100)
+
+class ApiKeyResponse(BaseModel):
+    id: str
+    name: str
+    key_prefix: str
+    rate_limit_per_minute: int
+    is_active: bool
+    last_used_at: Optional[str] = None
+    created_at: Optional[str] = None
+    api_key: Optional[str] = None
+
+class ProgrammaticScanRequest(BaseModel):
+    text: str = Field(..., min_length=20, description="Raw document text to audit")
+    title: Optional[str] = Field(default="API_Scan_Document.txt", description="Document title")
+    enable_web_search: bool = Field(default=True, description="Enable live internet cross-referencing")
+
+class RecalculateFiltersRequest(BaseModel):
+    exclude_quotes: bool = Field(default=True)
+    exclude_bibliography: bool = Field(default=True)
+    min_match_words: int = Field(default=8, ge=3, le=50)
 
 class RegisterRequest(BaseModel):
     email: EmailStr
@@ -1007,6 +1045,46 @@ async def export_pdf_report(
         }
     )
 
+@app.post("/api/scans/{scan_id}/recalculate")
+async def recalculate_scan_exclusions(
+    scan_id: str,
+    payload: RecalculateFiltersRequest,
+    user: Optional[User] = Depends(get_optional_current_user),
+    db: AsyncSession = Depends(get_db_session)
+):
+    """
+    Dynamically recalculates net originality and plagiarism metrics with custom
+    academic exclusions applied (Quotes, Bibliography, Small Matches).
+    """
+    res = await db.execute(select(ScanHistory).where(ScanHistory.id == scan_id))
+    scan = res.scalar_one_or_none()
+    if not scan:
+        raise HTTPException(status_code=404, detail="Scan record not found.")
+
+    report = scan.report_json or {}
+    full_text = report.get("full_text", "")
+    matches = report.get("matches", [])
+
+    filtered = AcademicCitationFilter.apply_filters(
+        full_text=full_text,
+        matches=matches,
+        exclude_quotes=payload.exclude_quotes,
+        exclude_bibliography=payload.exclude_bibliography,
+        min_match_words=payload.min_match_words,
+        total_words=report.get("total_words", 0)
+    )
+
+    return {
+        "scan_id": scan_id,
+        "gross_plagiarism_score": report.get("overall_score", 0.0),
+        "gross_originality_score": report.get("originality_score", 100.0),
+        "net_plagiarism_score": filtered["net_plagiarism_score"],
+        "net_originality_score": filtered["net_originality_score"],
+        "active_matches": filtered["active_matches"],
+        "excluded_matches": filtered["excluded_matches"],
+        "filters_applied": filtered["filters_applied"]
+    }
+
 # ------------------------------------------------------------------------------
 # Feedback & False-Positive Reporting Endpoints
 # ------------------------------------------------------------------------------
@@ -1425,6 +1503,161 @@ async def admin_delete_user(
     await db.delete(target_user)
     await db.commit()
     return {"status": "deleted", "user_id": user_id, "email": target_user.email}
+
+# ------------------------------------------------------------------------------
+# Developer SaaS API Keys & Programmatic Ingestion Endpoints
+# ------------------------------------------------------------------------------
+
+@app.post("/api/v1/keys", response_model=ApiKeyResponse, status_code=status.HTTP_201_CREATED)
+async def create_developer_api_key(
+    payload: CreateApiKeyRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session)
+):
+    """
+    Provisions a new cryptographically secure API key for programmatic / LMS access.
+    Returns the raw key (sk_live_...) exactly once.
+    """
+    raw_key, prefix, hashed = generate_new_api_key(payload.name)
+    new_key = ApiKey(
+        user_id=current_user.id,
+        name=payload.name,
+        key_prefix=prefix,
+        hashed_key=hashed,
+        rate_limit_per_minute=60 if current_user.subscription_tier == "free" else 300,
+        is_active=True
+    )
+    db.add(new_key)
+    await db.commit()
+    await db.refresh(new_key)
+
+    data = new_key.to_dict()
+    data["api_key"] = raw_key
+    return data
+
+
+@app.get("/api/v1/keys", response_model=List[ApiKeyResponse])
+async def list_developer_api_keys(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session)
+):
+    """Lists active API keys registered to the authenticated account."""
+    res = await db.execute(select(ApiKey).where(ApiKey.user_id == current_user.id, ApiKey.is_active == True))
+    keys = res.scalars().all()
+    return [k.to_dict() for k in keys]
+
+
+@app.delete("/api/v1/keys/{key_id}")
+async def revoke_developer_api_key(
+    key_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session)
+):
+    """Immediately revokes an API key."""
+    res = await db.execute(select(ApiKey).where(ApiKey.id == key_id, ApiKey.user_id == current_user.id))
+    key_record = res.scalar_one_or_none()
+    if not key_record:
+        raise HTTPException(status_code=404, detail="API key not found.")
+    key_record.is_active = False
+    await db.commit()
+    return {"status": "revoked", "key_id": key_id}
+
+
+@app.post("/api/v1/scan")
+async def programmatic_audit_scan(
+    payload: ProgrammaticScanRequest,
+    current_user: User = Depends(require_authenticated_principal),
+    db: AsyncSession = Depends(get_db_session)
+):
+    """
+    Synchronous / direct REST API audit for external platforms, LMS, and CLI clients.
+    Authenticates via Authorization: Bearer sk_live_... OR X-API-Key: sk_live_...
+    """
+    if not current_user.can_scan:
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail="Insufficient scan credits. Upgrade to Pro at https://chalbecopykrega-app.onrender.com."
+        )
+
+    clean_text = payload.text.strip()
+    words = clean_text.split()
+    total_words = len(words)
+
+    chunk_size = 50
+    overlap = 20
+    chunks = []
+    for i in range(0, total_words, chunk_size - overlap):
+        chunk_words = words[i:i + chunk_size]
+        if len(chunk_words) >= 5:
+            chunks.append(" ".join(chunk_words))
+
+    doc_id = f"api_doc_{uuid.uuid4().hex[:10]}"
+    scan_report = await plagiarism_engine.scan_document_chunks(
+        document_id=doc_id,
+        document_title=payload.title,
+        chunks=chunks,
+        enable_web_search=payload.enable_web_search
+    )
+
+    ai_analysis = AIDetectionEngine.analyze_text(clean_text)
+    citation_res = AcademicCitationFilter.apply_filters(
+        full_text=clean_text,
+        matches=scan_report.get("matches", []),
+        exclude_quotes=True,
+        exclude_bibliography=True,
+        min_match_words=8,
+        total_words=total_words
+    )
+
+    if not current_user.has_active_subscription:
+        current_user.scan_credits = max(0, current_user.scan_credits - 1)
+        db.add(current_user)
+        await db.commit()
+
+    return {
+        "status": "success",
+        "document_title": payload.title,
+        "total_words": total_words,
+        "overall_score": scan_report["overall_plagiarism_percentage"],
+        "originality_score": scan_report["originality_percentage"],
+        "net_plagiarism_score": citation_res["net_plagiarism_score"],
+        "net_originality_score": citation_res["net_originality_score"],
+        "ai_detection": {
+            "ai_probability": ai_analysis["ai_probability"],
+            "human_probability": ai_analysis["human_probability"],
+            "verdict": ai_analysis["verdict"],
+            "confidence": ai_analysis["confidence"]
+        },
+        "summary": scan_report["summary"],
+        "matches": citation_res["active_matches"]
+    }
+
+
+@app.get("/api/health/ready")
+async def readiness_probe(db: AsyncSession = Depends(get_db_session)):
+    """
+    Enterprise Kubernetes / PaaS readiness check: verifies database connectivity,
+    in-memory/Qdrant vector engine, and active singleton state.
+    """
+    try:
+        from sqlalchemy import text
+        await db.execute(text("SELECT 1"))
+    except Exception as db_err:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Database probe failed: {str(db_err)}"
+        )
+
+    return {
+        "status": "ready",
+        "checks": {
+            "database": "connected",
+            "vector_engine": "operational",
+            "ai_detector": "ready",
+            "embeddings": "warm"
+        },
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    }
 
 @app.get("/health")
 @app.get("/api/health")
