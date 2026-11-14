@@ -112,13 +112,24 @@ export default function ReportStickyHeader({
 
           {/* Document Metadata & Status Tag */}
           <div className="min-w-0">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <h2 className="text-base font-extrabold text-slate-900 dark:text-slate-100 truncate max-w-sm sm:max-w-md">
                 {report.document_title || report.filename || 'Audited Document'}
               </h2>
               <span className={cn('text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border', theme.bgClass)}>
                 {theme.statusText}
               </span>
+              {report.ai_detection && (
+                <span className={cn(
+                  'text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border flex items-center gap-1',
+                  report.ai_detection.ai_probability >= 50
+                    ? 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800'
+                    : 'bg-violet-50 text-violet-700 border-violet-200 dark:bg-violet-950/40 dark:text-violet-300 dark:border-violet-800'
+                )}>
+                  <Sparkles className="w-3 h-3" />
+                  AI Writing: {report.ai_detection.ai_probability}% ({report.ai_detection.verdict})
+                </span>
+              )}
             </div>
 
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500 dark:text-slate-400 mt-1">
@@ -129,6 +140,14 @@ export default function ReportStickyHeader({
               <span className="font-bold text-slate-700 dark:text-slate-300">
                 {similarity}% Similarity Index
               </span>
+              {report.citation_exclusions && (
+                <>
+                  <span>•</span>
+                  <span className="text-emerald-600 dark:text-emerald-400 font-semibold text-[11px]">
+                    ✓ Quotes & References Excluded
+                  </span>
+                </>
+              )}
             </div>
           </div>
         </div>

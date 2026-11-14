@@ -1,7 +1,7 @@
 import React from 'react';
-import { ShieldCheck, AlertTriangle, ShieldAlert, CheckCircle } from 'lucide-react';
+import { ShieldCheck, AlertTriangle, ShieldAlert, CheckCircle, Sparkles } from 'lucide-react';
 
-export default function ScoreGauge({ overallScore, originalityScore, summary }) {
+export default function ScoreGauge({ overallScore, originalityScore, summary, aiDetection = null }) {
   // Determine severity tier and theme colors
   const getSeverityTheme = (score) => {
     if (score < 20) {
@@ -118,6 +118,24 @@ export default function ScoreGauge({ overallScore, originalityScore, summary }) 
           <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
             <div className="text-base font-extrabold text-blue-600">{summary.internet_matches_count || 0}</div>
             <div className="text-[10px] font-semibold text-slate-500 uppercase mt-0.5">Web Sources</div>
+          </div>
+        </div>
+      )}
+
+      {/* Commercial AI Writing Detection Card */}
+      {aiDetection && (
+        <div className="mt-4 p-3 bg-gradient-to-r from-violet-50 to-indigo-50 dark:from-violet-950/40 dark:to-indigo-950/40 border border-violet-200 dark:border-violet-800 rounded-xl flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="p-1.5 rounded-lg bg-violet-100 dark:bg-violet-900/60 text-violet-700 dark:text-violet-300">
+              <Sparkles className="w-4 h-4" />
+            </div>
+            <div>
+              <p className="text-[11px] font-bold text-slate-800 dark:text-slate-100">AI Content Probability</p>
+              <p className="text-[10px] text-violet-600 dark:text-violet-400 font-semibold">{aiDetection.verdict || 'Human-Authored'}</p>
+            </div>
+          </div>
+          <div className="text-right">
+            <span className="text-base font-black text-violet-700 dark:text-violet-300">{aiDetection.ai_probability ?? 0}%</span>
           </div>
         </div>
       )}

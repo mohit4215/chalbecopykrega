@@ -31,6 +31,7 @@ class User(Base):
     # Relationships
     scans = relationship("ScanHistory", back_populates="user", cascade="all, delete-orphan", order_by="desc(ScanHistory.created_at)")
     feedbacks = relationship("Feedback", back_populates="user", cascade="all, delete-orphan", order_by="desc(Feedback.created_at)")
+    api_keys = relationship("ApiKey", back_populates="user", cascade="all, delete-orphan", order_by="desc(ApiKey.created_at)")
 
     @property
     def has_active_subscription(self) -> bool:
@@ -123,3 +124,36 @@ class Feedback(Base):
             "admin_notes": self.admin_notes,
             "created_at": self.created_at.isoformat() if self.created_at else None
         }
+
+
+class ApiKey(Base):
+    """
+    Developer SaaS API Key for institutional integrations, LMS LMS (Canvas/Moodle/Blackboard),
+    and external programmatic submission pipelines.
+    """
+    __tablename__ = "api_keys"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    name = Column(String(100), default="Default API Key", nullable=False)
+    key_prefix = Column(String(16), nullable=False, index=True)  # e.g., 'sk_live_a1b2c3'
+    hashed_key = Column(String(64), nullable=False, unique=True, index=True)  # SHA-256 hash
+    rate_limit_per_minute = Column(Integer, default=60, nullable=False)
+    is_active = Column(Boolean, default=True, nullable=False)
+    last_used_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=func.now(), nullable=False)
+
+    # Relationships
+    user = relationship("User", back_populates="api_keys")
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "name": self.name,
+            "key_prefix": self.key_prefix,
+            "rate_limit_per_minute": self.rate_limit_per_minute,
+            "is_active": self.is_active,
+            "last_used_at": self.last_used_at.isoformat() if self.last_used_at else None,
+            "created_at": self.created_at.isoformat() if self.created_at else None
+        }
+

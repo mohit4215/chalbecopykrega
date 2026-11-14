@@ -94,6 +94,10 @@ class PDFReportGenerator:
         full_text = report_data.get("full_text", "")
         scan_date = datetime.now().strftime("%B %d, %Y - %H:%M UTC")
 
+        ai_data = report_data.get("ai_detection") or {}
+        ai_probability = float(ai_data.get("ai_probability", 0.0))
+        ai_verdict = ai_data.get("verdict", "Human-Authored")
+
         # Color theme based on score severity
         if overall_score < 20:
             score_color = "#10b981"  # Emerald
@@ -321,7 +325,8 @@ class PDFReportGenerator:
                             <div class="badge">{severity_label}</div>
                             <div style="font-size: 11px; color: #334155; margin-top: 6px;">
                                 Originality Coefficient: <strong>{originality_score}% Original Content</strong><br/>
-                                Total Matched Sources: <strong>{len(matches)} primary clusters identified</strong>
+                                Total Matched Sources: <strong>{len(matches)} primary clusters identified</strong><br/>
+                                AI Writing Detection: <strong>{ai_probability}% Probability ({ai_verdict})</strong>
                             </div>
                         </td>
                     </tr>

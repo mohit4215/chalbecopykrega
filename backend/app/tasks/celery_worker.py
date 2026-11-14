@@ -15,6 +15,8 @@ from app.services.core_engine import (
     CoreNLPMatcher,
     PlagiarismDetectionEngine
 )
+from app.services.ai_detector import AIDetectionEngine
+from app.services.citation_filter import AcademicCitationFilter
 
 logger = logging.getLogger("plagiarism.celery")
 
@@ -328,12 +330,26 @@ def process_plagiarism_document(
             })
 
         new_scan_id = str(uuid.uuid4())
+        
+        # Enterprise Detection: Synthetic AI Writing & Citation Exclusions
+        ai_analysis = AIDetectionEngine.analyze_text(extraction_result.cleaned_text)
+        citation_filter_result = AcademicCitationFilter.apply_filters(
+            full_text=extraction_result.cleaned_text,
+            matches=formatted_matches,
+            exclude_quotes=True,
+            exclude_bibliography=True,
+            min_match_words=8,
+            total_words=extraction_result.metadata.total_words
+        )
+
         final_payload = {
             "scan_id": new_scan_id,
             "document_id": doc_id,
             "document_title": filename,
             "overall_score": scan_report["overall_plagiarism_percentage"],
             "originality_score": scan_report["originality_percentage"],
+            "net_plagiarism_score": citation_filter_result["net_plagiarism_score"],
+            "net_originality_score": citation_filter_result["net_originality_score"],
             "total_words": extraction_result.metadata.total_words,
             "total_characters": extraction_result.metadata.total_characters_cleaned,
             "remaining_credits": 0,
@@ -344,7 +360,9 @@ def process_plagiarism_document(
                 "paraphrase_matches_count": scan_report["summary"]["paraphrase_matches_count"],
                 "internet_matches_count": scan_report["summary"]["internet_matches_count"]
             },
-            "matches": formatted_matches
+            "matches": formatted_matches,
+            "ai_detection": ai_analysis,
+            "citation_exclusions": citation_filter_result["filters_applied"]
         }
 
         # Step 5: Persist to database & deduct credit
