@@ -1,5 +1,5 @@
 import React from 'react';
-import { Globe, Layers, ExternalLink, ChevronRight, CheckCircle2, Flag, ShieldCheck } from 'lucide-react';
+import { Globe, Layers, ExternalLink, ChevronRight, CheckCircle2, Flag } from 'lucide-react';
 import { cn } from '../lib/utils';
 
 export default function SourcesSidebar({

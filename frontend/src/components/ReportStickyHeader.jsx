@@ -3,8 +3,6 @@ import {
   ArrowLeft, 
   Download, 
   Printer, 
-  Loader2, 
-  FileText, 
   Sparkles,
   CheckCircle2,
   AlertTriangle,

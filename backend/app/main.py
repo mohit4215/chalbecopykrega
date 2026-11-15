@@ -16,6 +16,7 @@ import tempfile
 import shutil
 import io
 import math
+from contextlib import asynccontextmanager
 from typing import Optional, List, Dict, Any
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Depends, Request, Header, Query, status, BackgroundTasks, WebSocket, WebSocketDisconnect
 from fastapi.responses import StreamingResponse, Response, RedirectResponse
@@ -85,11 +86,82 @@ from celery.result import AsyncResult
 
 logger = logging.getLogger("plagiarism.main")
 
+
+async def seed_default_users():
+    """Pre-seeds standard test and administrative users on startup."""
+    try:
+        from app.services.database import AsyncSessionLocal
+        async with AsyncSessionLocal() as session:
+            # 1. Student demo account
+            res = await session.execute(select(User).where(User.email == "student@university.edu"))
+            if not res.scalar_one_or_none():
+                student_user = User(
+                    id=str(uuid.uuid4()),
+                    email="student@university.edu",
+                    hashed_password=hash_password("password123"),
+                    is_admin=False,
+                    is_banned=False,
+                    scan_credits=25,
+                    subscription_tier="pro",
+                    subscription_status="active"
+                )
+                session.add(student_user)
+
+            # 2. Superadmin accounts
+            for admin_email in ("admin@poach.com", "admin@originalityguard.com"):
+                res = await session.execute(select(User).where(User.email == admin_email))
+                if not res.scalar_one_or_none():
+                    admin_user = User(
+                        id=str(uuid.uuid4()),
+                        email=admin_email,
+                        hashed_password=hash_password("admin123"),
+                        is_admin=True,
+                        is_banned=False,
+                        scan_credits=100,
+                        subscription_tier="pro",
+                        subscription_status="active"
+                    )
+                    session.add(admin_user)
+
+            # 3. Mohit admin accounts
+            for mohit_email in ("mohit@poach.com", "mohit@originalityguard.com"):
+                res = await session.execute(select(User).where(User.email == mohit_email))
+                if not res.scalar_one_or_none():
+                    mohit_user = User(
+                        id=str(uuid.uuid4()),
+                        email=mohit_email,
+                        hashed_password=hash_password("password123"),
+                        is_admin=True,
+                        is_banned=False,
+                        scan_credits=100,
+                        subscription_tier="pro",
+                        subscription_status="active"
+                    )
+                    session.add(mohit_user)
+
+            await session.commit()
+    except Exception:
+        pass
+
+
+@asynccontextmanager
+async def lifespan(app_instance: FastAPI):
+    await init_db()
+    # Initialize Redis-backed rate limiting (gracefully falls back if Redis is not running)
+    await RateLimitingManager.init()
+    # Pre-seed default user accounts
+    await seed_default_users()
+    # Pre-seed internal database with reference papers
+    seed_reference_corpus()
+    yield
+
+
 # Initialize FastAPI application
 app = FastAPI(
     title="Poach Plagiarism Detection & SaaS Monetization API",
     description="Originality checking with Stripe Subscriptions, Credits, and Webhook fulfillment.",
-    version="4.0.0"
+    version="4.0.0",
+    lifespan=lifespan
 )
 
 # ------------------------------------------------------------------------------
@@ -328,74 +400,6 @@ plagiarism_engine = PlagiarismDetectionEngine(
     web_client=web_search_client,
     matcher=nlp_matcher
 )
-
-async def seed_default_users():
-    """Pre-seeds standard test and administrative users on startup."""
-    try:
-        from app.services.database import AsyncSessionLocal
-        async with AsyncSessionLocal() as session:
-            # 1. Student demo account
-            res = await session.execute(select(User).where(User.email == "student@university.edu"))
-            if not res.scalar_one_or_none():
-                student_user = User(
-                    id=str(uuid.uuid4()),
-                    email="student@university.edu",
-                    hashed_password=hash_password("password123"),
-                    is_admin=False,
-                    is_banned=False,
-                    scan_credits=25,
-                    subscription_tier="pro",
-                    subscription_status="active"
-                )
-                session.add(student_user)
-
-            # 2. Superadmin accounts
-            for admin_email in ("admin@poach.com", "admin@originalityguard.com"):
-                res = await session.execute(select(User).where(User.email == admin_email))
-                if not res.scalar_one_or_none():
-                    admin_user = User(
-                        id=str(uuid.uuid4()),
-                        email=admin_email,
-                        hashed_password=hash_password("admin123"),
-                        is_admin=True,
-                        is_banned=False,
-                        scan_credits=100,
-                        subscription_tier="pro",
-                        subscription_status="active"
-                    )
-                    session.add(admin_user)
-
-            # 3. Mohit admin accounts
-            for mohit_email in ("mohit@poach.com", "mohit@originalityguard.com"):
-                res = await session.execute(select(User).where(User.email == mohit_email))
-                if not res.scalar_one_or_none():
-                    mohit_user = User(
-                        id=str(uuid.uuid4()),
-                        email=mohit_email,
-                        hashed_password=hash_password("password123"),
-                        is_admin=True,
-                        is_banned=False,
-                        scan_credits=100,
-                        subscription_tier="pro",
-                        subscription_status="active"
-                    )
-                    session.add(mohit_user)
-
-            await session.commit()
-    except Exception as e:
-        pass
-
-@app.on_event("startup")
-async def on_startup():
-    await init_db()
-    # Initialize Redis-backed rate limiting (gracefully falls back if Redis is not running)
-    await RateLimitingManager.init()
-
-    # Pre-seed default user accounts
-    await seed_default_users()
-
-    # Pre-seed internal database with reference papers
-    seed_reference_corpus()
 
 # ------------------------------------------------------------------------------
 # Authentication Routes (Protected by IP Rate Limiting: 10 req/min)

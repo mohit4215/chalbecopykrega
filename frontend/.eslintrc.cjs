@@ -28,6 +28,6 @@ module.exports = {
   rules: {
     'react/prop-types': 'off',
     'react/no-unescaped-entities': 'warn',
-    'no-unused-vars': ['warn', { argsIgnorePattern: '^_' }]
+    'no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^React$' }]
   }
 };

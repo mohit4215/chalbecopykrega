@@ -16,8 +16,6 @@ import {
   Zap, 
   Sparkles,
   ShieldCheck,
-  User as UserIcon,
-  CheckCircle2,
   Code2
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
@@ -34,7 +32,7 @@ export default function AppShell({
   children
 }) {
   const { user, isAuthenticated, logout } = useAuth();
-  const { theme, toggleTheme, isDark } = useTheme();
+  const { toggleTheme, isDark } = useTheme();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 

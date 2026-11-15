@@ -55,6 +55,7 @@ function MainApp() {
     } else if (!isAuthenticated) {
       telemetry.reset();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAuthenticated, user?.id]);
 
   const handleScanComplete = (reportData) => {

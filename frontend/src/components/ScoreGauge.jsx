@@ -1,5 +1,5 @@
 import React from 'react';
-import { ShieldCheck, AlertTriangle, ShieldAlert, CheckCircle, Sparkles } from 'lucide-react';
+import { ShieldCheck, AlertTriangle, ShieldAlert, Sparkles } from 'lucide-react';
 
 export default function ScoreGauge({ overallScore, originalityScore, summary, aiDetection = null }) {
   // Determine severity tier and theme colors

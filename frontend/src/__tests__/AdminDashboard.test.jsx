@@ -62,6 +62,10 @@ describe('Admin Dashboard & RBAC Unit Tests', () => {
     expect(screen.getByText(/Superadmin Control Portal/i)).toBeInTheDocument();
     expect(screen.getByText(/RBAC Level 1/i)).toBeInTheDocument();
     expect(screen.getByText(/User Directory/i)).toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(screen.getByText('120')).toBeInTheDocument();
+    });
   });
 
   test('AdminOverview renders KPI cards and metrics accurately', () => {

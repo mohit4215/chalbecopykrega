@@ -43,6 +43,7 @@ export function AuthProvider({ children }) {
           // Network offline / slow connection
         });
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const apiBase = (() => {

@@ -184,7 +184,7 @@ class TestAsyncPlagiarismPipeline:
         EAGER_TASK_STORE.pop(task_id, None)
 
     def test_websocket_task_status_streaming(self):
-        from starlette.testclient import TestClient
+        from fastapi.testclient import TestClient
         from app.main import app
         from app.services.task_stream import publish_task_event, EAGER_TASK_STORE
 

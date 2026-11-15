@@ -1,5 +1,5 @@
 import React from 'react';
-import { ExternalLink, ChevronRight, Layers, FileText, Globe } from 'lucide-react';
+import { ChevronRight, Layers, FileText, Globe } from 'lucide-react';
 
 export default function MatchList({ 
   matches = [], 
