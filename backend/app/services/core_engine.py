@@ -347,7 +347,14 @@ class InternalVectorDB:
                 matrix[row] /= norm
         return matrix
 
-    def index_submission(self, document_id: str, student_name: str, title: str, chunks: List[str]) -> int:
+    def index_submission(
+        self,
+        document_id: str,
+        student_name: str,
+        title: str,
+        chunks: List[str],
+        category: str = "Submitted Student Work"
+    ) -> int:
         """
         Embeds and indexes document chunks into the vector database.
         """
@@ -370,6 +377,7 @@ class InternalVectorDB:
                         "document_id": document_id,
                         "student_name": student_name,
                         "title": title,
+                        "category": category,
                         "chunk_index": idx,
                         "chunk_text": chunk_text
                     }
@@ -385,13 +393,20 @@ class InternalVectorDB:
                     "document_id": document_id,
                     "student_name": student_name,
                     "title": title,
+                    "category": category,
                     "chunk_index": idx,
                     "chunk_text": chunk_text,
                     "vector": embedding
                 })
 
-        logger.info(f"Indexed {len(chunks)} chunks for document '{title}' by {student_name}.")
+        logger.info(f"Indexed {len(chunks)} chunks for document '{title}' by {student_name} [{category}].")
         return len(chunks)
+
+    def remove_document(self, document_id: str) -> int:
+        """Purges document chunks from the active vector index."""
+        before_count = len(self._fallback_store)
+        self._fallback_store = [item for item in self._fallback_store if item.get("document_id") != document_id]
+        return before_count - len(self._fallback_store)
 
     def query_similar_chunks(self, query_vector: np.ndarray, top_k: int = 3, threshold: float = 0.78, exclude_doc_id: Optional[str] = None) -> List[Dict[str, Any]]:
         """
@@ -416,7 +431,7 @@ class InternalVectorDB:
                     "source_author": hit.payload.get("student_name"),
                     "source_snippet": hit.payload.get("chunk_text"),
                     "similarity_score": round(float(hit.score), 4),
-                    "source_category": "Submitted Student Work"
+                    "source_category": hit.payload.get("category", "Submitted Student Work")
                 })
                 if len(results) >= top_k:
                     break
@@ -440,7 +455,7 @@ class InternalVectorDB:
                         "source_author": item["student_name"],
                         "source_snippet": item["chunk_text"],
                         "similarity_score": round(score, 4),
-                        "source_category": "Submitted Student Work"
+                        "source_category": item.get("category", "Submitted Student Work")
                     })
 
         return results

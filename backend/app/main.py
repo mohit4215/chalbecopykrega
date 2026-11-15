@@ -30,7 +30,7 @@ import functools
 from jose import jwt, JWTError
 
 from app.config import settings
-from app.models.db_models import User, ScanHistory, Feedback, ApiKey
+from app.models.db_models import User, ScanHistory, Feedback, ApiKey, RepositoryDocument
 from app.services.database import get_db_session, init_db
 from app.services.auth import (
     hash_password,
@@ -66,7 +66,12 @@ from app.services.core_engine import (
     CoreNLPMatcher,
     PlagiarismDetectionEngine
 )
-from app.services.knowledge_base import vector_db, seed_reference_corpus
+from app.services.knowledge_base import (
+    vector_db, 
+    seed_reference_corpus, 
+    sync_repository_from_db, 
+    chunk_text_sliding_window
+)
 from app.services.security import (
     validate_secure_file_upload,
     SecurityHeadersMiddleware,
@@ -151,8 +156,14 @@ async def lifespan(app_instance: FastAPI):
     await RateLimitingManager.init()
     # Pre-seed default user accounts
     await seed_default_users()
-    # Pre-seed internal database with reference papers
-    seed_reference_corpus()
+    # Synchronize and pre-seed institutional repository documents from database
+    try:
+        from app.services.database import AsyncSessionLocal
+        async with AsyncSessionLocal() as session:
+            await sync_repository_from_db(session)
+    except Exception as exc:
+        logger.warning(f"Database repository sync fallback to memory: {exc}")
+        seed_reference_corpus()
     yield
 
 
@@ -216,6 +227,41 @@ class ProgrammaticScanRequest(BaseModel):
     text: str = Field(..., min_length=20, description="Raw document text to audit")
     title: Optional[str] = Field(default="API_Scan_Document.txt", description="Document title")
     enable_web_search: bool = Field(default=True, description="Enable live internet cross-referencing")
+    save_to_repository: bool = Field(default=False, description="Index document into Institutional Repository")
+
+class CreateRepositoryDocumentRequest(BaseModel):
+    title: str = Field(..., min_length=2, max_length=255)
+    author: str = Field(..., min_length=2, max_length=255)
+    category: str = Field(default="Academic Paper", max_length=100)
+    institution: Optional[str] = Field(default="Institutional Library", max_length=255)
+    content: str = Field(..., min_length=10, description="Full plain text content of the reference document")
+
+class RepositoryDocumentResponse(BaseModel):
+    id: str
+    title: str
+    author: str
+    category: str
+    institution: str
+    chunk_count: int
+    word_count: int
+    is_active: bool
+    preview: str
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+
+class RepositoryListResponse(BaseModel):
+    total: int
+    page: int
+    limit: int
+    pages: int
+    documents: List[RepositoryDocumentResponse]
+
+class RepositoryStatsResponse(BaseModel):
+    total_documents: int
+    total_chunks: int
+    total_words: int
+    active_in_memory_index: int
+    categories: Dict[str, int]
 
 class RecalculateFiltersRequest(BaseModel):
     exclude_quotes: bool = Field(default=True)
@@ -1613,6 +1659,31 @@ async def programmatic_audit_scan(
         total_words=total_words
     )
 
+    if payload.save_to_repository:
+        repo_doc = RepositoryDocument(
+            id=doc_id,
+            title=payload.title or "Submitted Document",
+            author=current_user.email,
+            category="Submitted Student Work",
+            institution="Institutional Submissions",
+            full_text=clean_text,
+            chunk_count=len(chunks),
+            word_count=total_words,
+            is_active=True
+        )
+        db.add(repo_doc)
+        await db.commit()
+        try:
+            vector_db.index_submission(
+                document_id=doc_id,
+                student_name=current_user.email,
+                title=payload.title or "Submitted Document",
+                chunks=chunks,
+                category="Submitted Student Work"
+            )
+        except Exception as exc:
+            logger.warning(f"Failed to auto-index submitted doc {doc_id}: {exc}")
+
     if not current_user.has_active_subscription:
         current_user.scan_credits = max(0, current_user.scan_credits - 1)
         db.add(current_user)
@@ -1635,6 +1706,146 @@ async def programmatic_audit_scan(
         "summary": scan_report["summary"],
         "matches": citation_res["active_matches"]
     }
+
+
+# ------------------------------------------------------------------------------
+# Institutional Reference Repository Endpoints
+# ------------------------------------------------------------------------------
+
+@app.get("/api/repository/stats", response_model=RepositoryStatsResponse)
+async def get_repository_stats(db: AsyncSession = Depends(get_db_session)):
+    """Provides real-time metrics on the institutional reference plagiarism database."""
+    total_docs_res = await db.execute(select(func.count()).select_from(RepositoryDocument).where(RepositoryDocument.is_active == True))
+    total_docs = total_docs_res.scalar() or 0
+
+    total_words_res = await db.execute(select(func.sum(RepositoryDocument.word_count)).where(RepositoryDocument.is_active == True))
+    total_words = total_words_res.scalar() or 0
+
+    total_chunks_res = await db.execute(select(func.sum(RepositoryDocument.chunk_count)).where(RepositoryDocument.is_active == True))
+    total_chunks = total_chunks_res.scalar() or 0
+
+    cats_res = await db.execute(
+        select(RepositoryDocument.category, func.count(RepositoryDocument.id))
+        .where(RepositoryDocument.is_active == True)
+        .group_by(RepositoryDocument.category)
+    )
+    categories = {row[0]: row[1] for row in cats_res.all()}
+
+    active_in_mem = len(getattr(vector_db, "_fallback_store", []))
+
+    return {
+        "total_documents": total_docs,
+        "total_chunks": total_chunks,
+        "total_words": total_words,
+        "active_in_memory_index": active_in_mem,
+        "categories": categories
+    }
+
+
+@app.get("/api/repository/documents", response_model=RepositoryListResponse)
+async def list_repository_documents(
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=100),
+    search: Optional[str] = None,
+    category: Optional[str] = None,
+    db: AsyncSession = Depends(get_db_session)
+):
+    """Lists indexed academic and institutional reference documents with filtering."""
+    query = select(RepositoryDocument).where(RepositoryDocument.is_active == True)
+
+    if search and search.strip():
+        term = f"%{search.strip()}%"
+        query = query.where(
+            (RepositoryDocument.title.ilike(term)) |
+            (RepositoryDocument.author.ilike(term)) |
+            (RepositoryDocument.institution.ilike(term))
+        )
+
+    if category and category.strip() and category.strip().lower() != "all":
+        query = query.where(RepositoryDocument.category == category.strip())
+
+    count_query = select(func.count()).select_from(query.subquery())
+    total_res = await db.execute(count_query)
+    total = total_res.scalar() or 0
+
+    offset = (page - 1) * limit
+    paged_query = query.order_by(desc(RepositoryDocument.created_at)).offset(offset).limit(limit)
+    res = await db.execute(paged_query)
+    docs = res.scalars().all()
+
+    pages = math.ceil(total / limit) if total > 0 else 1
+
+    return {
+        "total": total,
+        "page": page,
+        "limit": limit,
+        "pages": pages,
+        "documents": [d.to_dict() for d in docs]
+    }
+
+
+@app.post("/api/repository/documents", response_model=RepositoryDocumentResponse, status_code=status.HTTP_201_CREATED)
+async def create_repository_document(
+    payload: CreateRepositoryDocumentRequest,
+    current_user: User = Depends(require_authenticated_principal),
+    db: AsyncSession = Depends(get_db_session)
+):
+    """
+    Ingests a new academic paper, student work, or reference literature into the
+    institutional database and vector index for future plagiarism cross-referencing.
+    """
+    content = payload.content.strip()
+    words = content.split()
+    chunks = chunk_text_sliding_window(content, chunk_size=50, overlap=20)
+
+    doc_id = f"doc_{uuid.uuid4().hex[:12]}"
+    new_doc = RepositoryDocument(
+        id=doc_id,
+        title=payload.title.strip(),
+        author=payload.author.strip(),
+        category=payload.category.strip() or "Academic Paper",
+        institution=payload.institution.strip() if payload.institution else "Institutional Library",
+        full_text=content,
+        chunk_count=len(chunks),
+        word_count=len(words),
+        is_active=True
+    )
+    db.add(new_doc)
+    await db.commit()
+    await db.refresh(new_doc)
+
+    try:
+        vector_db.index_submission(
+            document_id=new_doc.id,
+            student_name=new_doc.author,
+            title=new_doc.title,
+            chunks=chunks,
+            category=new_doc.category
+        )
+    except Exception as exc:
+        logger.warning(f"Vector indexing warning for document {new_doc.id}: {exc}")
+
+    return new_doc.to_dict()
+
+
+@app.delete("/api/repository/documents/{doc_id}")
+async def delete_repository_document(
+    doc_id: str,
+    current_user: User = Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db_session)
+):
+    """Admin-only: Purges a document from the reference repository and vector index."""
+    res = await db.execute(select(RepositoryDocument).where(RepositoryDocument.id == doc_id))
+    doc = res.scalar_one_or_none()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Repository document not found.")
+
+    doc.is_active = False
+    await db.commit()
+
+    vector_db.remove_document(doc_id)
+
+    return {"status": "success", "message": f"Document '{doc.title}' removed from plagiarism reference database."}
 
 
 @app.get("/api/health/ready")

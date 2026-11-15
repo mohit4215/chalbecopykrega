@@ -16,7 +16,8 @@ import {
   Zap, 
   Sparkles,
   ShieldCheck,
-  Code2
+  Code2,
+  Database
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
@@ -40,6 +41,7 @@ export default function AppShell({
 
   const navItems = [
     { id: 'scan', label: 'New Scan', icon: UploadCloud, badge: null },
+    { id: 'repository', label: 'Reference Database', icon: Database, badge: 'Corpus' },
     { id: 'history', label: 'Scan History', icon: History, badge: null },
     { id: 'pricing', label: 'Pricing Plans', icon: Sparkles, badge: isPro ? 'Active' : 'Upgrade' },
     { id: 'developers', label: 'Developer API', icon: Code2, badge: 'v1' },

@@ -95,7 +95,7 @@ class AcademicCitationFilter:
         for match in matches:
             start = match.get("start_index", 0)
             end = match.get("end_index", 0)
-            matched_text = match.get("matched_text", "")
+            matched_text = match.get("matched_text") or match.get("matched_chunk_text", "")
             word_count = len(re.findall(r"\b\w+\b", matched_text))
 
             exclusion_reason: Optional[str] = None
