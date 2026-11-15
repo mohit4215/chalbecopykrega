@@ -20,6 +20,7 @@ import AdminDashboard from './components/admin/AdminDashboard';
 import CookieConsent from './components/CookieConsent';
 import PrivacySettings from './components/PrivacySettings';
 import DeveloperApiDashboard from './components/DeveloperApiDashboard';
+import RepositoryDashboard from './components/RepositoryDashboard';
 import SupportChatWidget from './components/SupportChatWidget';
 import FlagModal from './components/FlagModal';
 import ProductTour from './components/ProductTour';
@@ -168,6 +169,8 @@ function MainApp() {
       {/* Route Views */}
       {activeTab === 'admin' && isAuthenticated ? (
         <AdminDashboard onExitAdmin={() => setActiveTab('scan')} />
+      ) : activeTab === 'repository' ? (
+        <RepositoryDashboard />
       ) : activeTab === 'pricing' ? (
         <PricingPage
           onNeedLogin={() => setAuthModal('login')}

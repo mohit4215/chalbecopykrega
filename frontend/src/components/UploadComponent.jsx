@@ -550,15 +550,21 @@ export default function UploadComponent({ onScanComplete, isLoading, setIsLoadin
 
             {/* Options & Action Button */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-2">
-              <label className="flex items-center gap-2.5 cursor-pointer text-xs font-semibold text-slate-700 dark:text-slate-300 select-none">
-                <input
-                  type="checkbox"
-                  checked={enableWeb}
-                  onChange={(e) => setEnableWeb(e.target.checked)}
-                  className="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500 border-slate-300"
-                />
-                <span>Cross-reference billions of real-time web pages</span>
-              </label>
+              <div className="flex flex-col gap-1.5">
+                <label className="flex items-center gap-2.5 cursor-pointer text-xs font-semibold text-slate-700 dark:text-slate-300 select-none">
+                  <input
+                    type="checkbox"
+                    checked={enableWeb}
+                    onChange={(e) => setEnableWeb(e.target.checked)}
+                    className="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500 border-slate-300"
+                  />
+                  <span>Cross-reference billions of real-time web pages</span>
+                </label>
+                <div className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-1.5 pl-6">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                  Institutional Reference Database & Vector Index Active
+                </div>
+              </div>
 
               <Button
                 size="lg"

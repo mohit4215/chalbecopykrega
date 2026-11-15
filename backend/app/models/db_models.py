@@ -157,3 +157,39 @@ class ApiKey(Base):
             "created_at": self.created_at.isoformat() if self.created_at else None
         }
 
+
+class RepositoryDocument(Base):
+    """
+    Institutional & Academic Reference Repository Database.
+    Stores reference papers, textbooks, past student submissions, and research articles
+    against which Poach cross-references incoming submissions for plagiarism detection.
+    """
+    __tablename__ = "repository_documents"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    title = Column(String(255), nullable=False, index=True)
+    author = Column(String(255), nullable=False, index=True)
+    category = Column(String(100), default="Academic Paper", nullable=False, index=True)  # e.g., 'Computer Science', 'Biology', 'Economics', 'Student Submission', 'Journal Article'
+    institution = Column(String(255), default="Institutional Library", nullable=False)
+    full_text = Column(Text, nullable=False)
+    chunk_count = Column(Integer, default=0, nullable=False)
+    word_count = Column(Integer, default=0, nullable=False)
+    is_active = Column(Boolean, default=True, nullable=False, index=True)
+    created_at = Column(DateTime(timezone=True), default=func.now(), nullable=False, index=True)
+    updated_at = Column(DateTime(timezone=True), default=func.now(), onupdate=func.now(), nullable=False)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "title": self.title,
+            "author": self.author,
+            "category": self.category,
+            "institution": self.institution,
+            "chunk_count": self.chunk_count,
+            "word_count": self.word_count,
+            "is_active": self.is_active,
+            "preview": self.full_text[:300] + "..." if len(self.full_text) > 300 else self.full_text,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None
+        }
+
