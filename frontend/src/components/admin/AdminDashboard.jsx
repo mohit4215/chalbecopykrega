@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
   ShieldAlert, 
   BarChart3, 
@@ -20,7 +20,7 @@ export default function AdminDashboard({ onExitAdmin }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  const fetchStats = async () => {
+  const fetchStats = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
@@ -35,13 +35,13 @@ export default function AdminDashboard({ onExitAdmin }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [authFetch]);
 
   useEffect(() => {
     if (user?.is_admin) {
       fetchStats();
     }
-  }, [user]);
+  }, [user, fetchStats]);
 
   // RBAC Gate: Verify Superadmin Privileges
   if (!user?.is_admin) {

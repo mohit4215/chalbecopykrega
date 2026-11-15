@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Check, Sparkles, Zap, Shield, ArrowRight, CreditCard } from 'lucide-react';
+import { Check, Sparkles, ArrowRight } from 'lucide-react';
 import telemetry from '../services/telemetry';
 
-export default function PricingPage({ onBillingSuccess, onNeedLogin }) {
+export default function PricingPage({ _onBillingSuccess, onNeedLogin }) {
   const { user, isAuthenticated, authFetch } = useAuth();
   const [loadingPlan, setLoadingPlan] = useState(null);
   const [error, setError] = useState('');

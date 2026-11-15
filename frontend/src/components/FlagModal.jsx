@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Flag, X, CheckCircle2, AlertTriangle, Send, ShieldAlert, Sparkles } from 'lucide-react';
+import { Flag, X, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 export default function FlagModal({ isOpen, onClose, match, report }) {

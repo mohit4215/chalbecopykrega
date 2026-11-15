@@ -1,5 +1,5 @@
 import React, { useMemo, useEffect, useRef } from 'react';
-import { FileText, ZoomIn, ZoomOut, Eye, CheckCircle2 } from 'lucide-react';
+import { FileText } from 'lucide-react';
 import { cn } from '../lib/utils';
 
 /**

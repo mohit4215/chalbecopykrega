@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
   Key, 
   Plus, 
@@ -8,10 +8,8 @@ import {
   Terminal, 
   ShieldCheck, 
   ExternalLink,
-  Code2,
   AlertCircle,
-  Zap,
-  Lock
+  Zap
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { useAuth } from '../context/AuthContext';
@@ -27,7 +25,7 @@ export default function DeveloperApiDashboard() {
   const [activeCodeTab, setActiveCodeTab] = useState('curl');
   const [error, setError] = useState('');
 
-  const fetchKeys = async () => {
+  const fetchKeys = useCallback(async () => {
     try {
       setLoading(true);
       const res = await authFetch('/api/v1/keys');
@@ -35,16 +33,16 @@ export default function DeveloperApiDashboard() {
         const data = await res.json();
         setKeys(data);
       }
-    } catch (err) {
+    } catch {
       setError('Failed to fetch developer API keys.');
     } finally {
       setLoading(false);
     }
-  };
+  }, [authFetch]);
 
   useEffect(() => {
     fetchKeys();
-  }, []);
+  }, [fetchKeys]);
 
   const handleCreateKey = async (e) => {
     e.preventDefault();

@@ -1,14 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
   Users, 
   Search, 
-  Filter, 
   ShieldAlert, 
-  ShieldCheck, 
   Coins, 
   Ban, 
   Trash2, 
-  CheckCircle2, 
   ChevronLeft, 
   ChevronRight, 
   X,
@@ -37,7 +34,7 @@ export default function AdminUserManagement() {
   const [creditAmount, setCreditAmount] = useState(25);
   const [isSubmittingCredit, setIsSubmittingCredit] = useState(false);
 
-  const fetchUsers = async () => {
+  const fetchUsers = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
@@ -61,11 +58,11 @@ export default function AdminUserManagement() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [authFetch, page, limit, search, tierFilter]);
 
   useEffect(() => {
     fetchUsers();
-  }, [page, tierFilter]);
+  }, [fetchUsers]);
 
   const handleSearchSubmit = (e) => {
     e.preventDefault();

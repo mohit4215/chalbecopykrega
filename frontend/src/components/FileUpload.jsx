@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Upload, FileText, CheckCircle2, AlertCircle, Sparkles } from 'lucide-react';
+import { Upload, CheckCircle2, AlertCircle, Sparkles } from 'lucide-react';
 
 const SAMPLE_PAPER = `Title: Modern Natural Language Processing Paradigms
 

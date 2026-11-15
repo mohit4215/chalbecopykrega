@@ -1,5 +1,5 @@
 import os
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     # App Settings
@@ -45,8 +45,6 @@ class Settings(BaseSettings):
     MAX_WEB_QUERIES_PER_DOC: int = 6
     WEB_VERIFY_TOP_N_RESULTS: int = 3
 
-    class Config:
-        env_file = ".env"
-        extra = "allow"
+    model_config = SettingsConfigDict(env_file=".env", extra="allow")
 
 settings = Settings()

@@ -6,12 +6,10 @@ import {
   Trash2, 
   AlertTriangle, 
   Clock, 
-  Lock, 
   FileJson, 
   CheckCircle2, 
   Loader2, 
-  X,
-  ExternalLink
+  X
 } from 'lucide-react';
 
 export default function PrivacySettings() {

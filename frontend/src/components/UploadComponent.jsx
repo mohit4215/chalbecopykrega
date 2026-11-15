@@ -14,11 +14,9 @@ import {
   Cpu, 
   Layers, 
   Search, 
-  CheckCircle, 
   Clock, 
   Loader2,
-  ArrowRight,
-  ShieldCheck
+  ArrowRight
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { cn } from '../lib/utils';
@@ -54,7 +52,7 @@ export default function UploadComponent({ onScanComplete, isLoading, setIsLoadin
   const [errorMessage, setErrorMessage] = useState('');
 
   // Task & Progress state
-  const [activeTaskId, setActiveTaskId] = useState(null);
+  const [, setActiveTaskId] = useState(null);
   const [taskProgress, setTaskProgress] = useState(5);
   const [currentStep, setCurrentStep] = useState('extracting');
   const [statusMessage, setStatusMessage] = useState('Submitting document to neural processing pipeline...');

@@ -109,7 +109,7 @@ async def validate_secure_file_upload(file: UploadFile = File(...)) -> UploadFil
             await file.seek(0)
             logger.warning(f"Security Alert: Upload rejected exceeding 10MB limit ({total_bytes} bytes).")
             raise HTTPException(
-                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                status_code=status.HTTP_413_CONTENT_TOO_LARGE,
                 detail=f"File exceeds maximum allowed size limit of 10 MB (10,485,760 bytes)."
             )
 

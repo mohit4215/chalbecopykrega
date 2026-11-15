@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { History, FileText, ChevronRight, Clock, ShieldCheck, AlertTriangle, ShieldAlert, RefreshCw, Download, Loader2 } from 'lucide-react';
 
@@ -9,7 +9,7 @@ export default function HistoryDashboard({ onSelectReport, onNewScan }) {
   const [error, setError] = useState('');
   const [downloadingId, setDownloadingId] = useState(null);
 
-  const fetchHistory = async () => {
+  const fetchHistory = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
@@ -24,7 +24,7 @@ export default function HistoryDashboard({ onSelectReport, onNewScan }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [authFetch]);
 
   const handleDownloadItemPDF = async (item) => {
     if (!item?.id) return;
@@ -54,7 +54,7 @@ export default function HistoryDashboard({ onSelectReport, onNewScan }) {
 
   useEffect(() => {
     fetchHistory();
-  }, []);
+  }, [fetchHistory]);
 
   const getScoreBadge = (score) => {
     if (score < 20) {

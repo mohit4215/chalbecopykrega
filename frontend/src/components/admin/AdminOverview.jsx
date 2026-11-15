@@ -9,7 +9,6 @@ import {
   Server, 
   ShieldCheck, 
   CheckCircle2, 
-  Calendar,
   RefreshCw
 } from 'lucide-react';
 

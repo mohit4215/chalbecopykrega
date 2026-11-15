@@ -1,17 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
-  Flag, 
   ExternalLink, 
   CheckCircle2, 
-  Clock, 
-  Search, 
-  Filter, 
   RefreshCw, 
-  Sparkles, 
   SlidersHorizontal,
   ChevronLeft,
-  ChevronRight,
-  MessageSquare
+  ChevronRight
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
@@ -28,7 +22,7 @@ export default function AdminFeedbackReview() {
   const [editingNotesId, setEditingNotesId] = useState(null);
   const [adminNotesDraft, setAdminNotesDraft] = useState('');
 
-  const fetchFeedbacks = async () => {
+  const fetchFeedbacks = useCallback(async () => {
     setLoading(true);
     try {
       const params = new URLSearchParams({
@@ -49,11 +43,11 @@ export default function AdminFeedbackReview() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [authFetch, page, statusFilter, reasonFilter]);
 
   useEffect(() => {
     fetchFeedbacks();
-  }, [page, statusFilter, reasonFilter]);
+  }, [fetchFeedbacks]);
 
   const handleUpdateStatus = async (feedbackId, newStatus, notes = null) => {
     setUpdatingId(feedbackId);
