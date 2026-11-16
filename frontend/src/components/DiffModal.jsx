@@ -288,6 +288,50 @@ export default function DiffModal({ match, isOpen, onClose, onFlagMatch, onOpenC
 
                     <p className="text-xs leading-relaxed font-sans">{remediationResult.pedagogical_feedback}</p>
 
+                    {/* Patchwriting Alert */}
+                    {remediationResult.is_patchwriting && (
+                      <div className="mt-2.5 p-2.5 rounded-lg bg-amber-100 dark:bg-amber-900/60 border border-amber-300 dark:border-amber-700 text-[11px] text-amber-900 dark:text-amber-200">
+                        <strong className="block font-bold">Academic Integrity Alert: Patchwriting</strong>
+                        Sentence syntax and clause sequence closely mirror the reference source despite thesaurus substitution.
+                      </div>
+                    )}
+
+                    {/* Word-by-Word Granular Token Diff */}
+                    {remediationResult.token_diff?.length > 0 && (
+                      <div className="mt-3 pt-2.5 border-t border-current/15 space-y-1.5">
+                        <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider">
+                          <span>Syntactic Token Highlighting:</span>
+                          <div className="flex items-center gap-2 text-[9px] font-semibold lowercase">
+                            <span className="flex items-center gap-1">
+                              <span className="w-2 h-2 rounded-full bg-rose-500 inline-block"></span> verbatim
+                            </span>
+                            <span className="flex items-center gap-1">
+                              <span className="w-2 h-2 rounded-full bg-purple-500 inline-block"></span> quoted
+                            </span>
+                            <span className="flex items-center gap-1">
+                              <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block"></span> independent
+                            </span>
+                          </div>
+                        </div>
+                        <div className="p-2.5 bg-white/90 dark:bg-slate-900/90 rounded-lg border border-current/10 text-xs font-serif leading-relaxed flex flex-wrap gap-1">
+                          {remediationResult.token_diff.map((item, tIdx) => (
+                            <span
+                              key={tIdx}
+                              className={`px-1 py-0.5 rounded transition ${
+                                item.tag === 'verbatim'
+                                  ? 'bg-rose-100 text-rose-800 dark:bg-rose-950/80 dark:text-rose-300 font-bold'
+                                  : item.tag === 'quoted'
+                                  ? 'bg-purple-100 text-purple-800 dark:bg-purple-950/80 dark:text-purple-300 italic'
+                                  : 'text-slate-800 dark:text-slate-200'
+                              }`}
+                            >
+                              {item.word}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
                     {remediationResult.remaining_verbatim_phrases?.length > 0 && (
                       <div className="mt-2 pt-2 border-t border-current/10 space-y-1">
                         <span className="text-[10px] font-bold uppercase tracking-wider block">

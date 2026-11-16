@@ -17,7 +17,8 @@ import {
   Sparkles,
   ShieldCheck,
   Code2,
-  Database
+  Database,
+  Users
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
@@ -30,6 +31,7 @@ export default function AppShell({
   onTabChange,
   onStartTour,
   onOpenCodeInspector,
+  onOpenCohortCollusion,
   report,
   children
 }) {
@@ -43,6 +45,7 @@ export default function AppShell({
   const navItems = [
     { id: 'scan', label: 'New Scan', icon: UploadCloud, badge: null },
     { id: 'repository', label: 'Reference Database', icon: Database, badge: 'Corpus' },
+    { id: 'cohort-collusion', label: 'Cohort Collusion', icon: Users, badge: 'Rings', action: onOpenCohortCollusion },
     { id: 'code-inspector', label: 'Code AST Inspector', icon: Code2, badge: 'AST', action: onOpenCodeInspector },
     { id: 'history', label: 'Scan History', icon: History, badge: null },
     { id: 'pricing', label: 'Pricing Plans', icon: Sparkles, badge: isPro ? 'Active' : 'Upgrade' },

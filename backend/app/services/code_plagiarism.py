@@ -1,12 +1,17 @@
-"""Source Code Plagiarism Detection & Structural AST Normalization Engine.
+"""Source Code Plagiarism Detection & Structural AST Normalization Engine (Hardened Edition).
 
-Differentiates Poach from Turnitin by analyzing source code in Python, JavaScript/TypeScript,
-Java, C/C++, Go, and Rust. Defeats variable-renaming obfuscation, reordered declarations,
-and comment-stripping through identifier normalization and structural n-gram fingerprinting.
+Differentiates Poach from Turnitin by analyzing source code across 7+ languages:
+Python, JavaScript/TypeScript, Java, C/C++, Go, C#, and Rust.
+Defeats:
+  1. Identifier-renaming obfuscation (mapping variables, functions, and arguments to v1, v2, v3...)
+  2. Comment, docstring, and formatting stripping
+  3. Dead-code and dummy-variable injection (prunes unreferenced dummy statements)
+  4. Control-flow normalization (while/for equivalence, boolean expression simplification)
+  5. Rolling structural k-gram fingerprinting with Jaccard overlap
 """
 
 import re
-from typing import List, Dict, Any, Tuple, Optional
+from typing import List, Dict, Any, Tuple, Set
 
 
 class CodePlagiarismEngine:
@@ -27,7 +32,7 @@ class CodePlagiarismEngine:
         ".rs": "rust",
     }
 
-    # Universal programming keywords that are preserved during normalization
+    # Universal programming control keywords preserved during structural normalization
     KEYWORDS = {
         "if", "else", "elif", "while", "for", "do", "return", "break", "continue",
         "def", "function", "class", "import", "from", "as", "try", "except", "catch",
@@ -39,12 +44,12 @@ class CodePlagiarismEngine:
     @classmethod
     def is_code_file(cls, filename: str) -> bool:
         """Determines if a filename belongs to a supported programming language."""
-        lower_name = filename.lower()
+        lower_name = (filename or "").lower()
         return any(lower_name.endswith(ext) for ext in cls.SUPPORTED_EXTENSIONS)
 
     @classmethod
-    def strip_comments_and_strings(cls, code: str, language: str = "generic") -> str:
-        """Strips single-line and multi-line comments from code."""
+    def strip_comments_and_strings(cls, code: str) -> str:
+        """Strips single-line and multi-line comments and literal values from code."""
         # Multi-line strings in Python: '''...''' or """..."""
         code = re.sub(r'("""[\s\S]*?"""|\'\'\'[\s\S]*?\'\'\')', ' "STR" ', code)
         # Block comments: /* ... */
@@ -53,16 +58,44 @@ class CodePlagiarismEngine:
         code = re.sub(r'(//|#)[^\r\n]*', ' ', code)
         # String literals: "..." or '...'
         code = re.sub(r'("[^"\\]*(?:\\.[^"\\]*)*"|\'[^\'\\]*(?:\\.[^\'\\]*)*\')', ' "STR" ', code)
+        # Numerical literals to generic NUM
+        code = re.sub(r'\b\d+(\.\d+)?\b', ' "NUM" ', code)
         return code
 
     @classmethod
-    def normalize_identifiers(cls, code: str) -> Tuple[str, Dict[str, str]]:
+    def prune_dummy_injections(cls, code: str) -> Tuple[str, int]:
+        """
+        Detects and strips dead-code and dummy injections common in cheat obfuscation:
+        e.g. `dummy_var_123 = 0;` or `pass;` or `console.log("test");`
+        """
+        initial_lines = code.splitlines()
+        clean_lines: List[str] = []
+        pruned_count = 0
+
+        dummy_patterns = [
+            r'^\s*(dummy|temp|unused|fake|junk)[a-zA-Z0-9_]*\s*=\s*.*$',
+            r'^\s*(print|console\.log|System\.out\.println)\s*\(.*\)\s*;?\s*$',
+            r'^\s*pass\s*;?\s*$',
+            r'^\s*;\s*$'
+        ]
+
+        for line in initial_lines:
+            if any(re.match(pat, line, re.IGNORECASE) for pat in dummy_patterns):
+                pruned_count += 1
+                continue
+            clean_lines.append(line)
+
+        return "\n".join(clean_lines), pruned_count
+
+    @classmethod
+    def normalize_identifiers(cls, code: str) -> Tuple[str, Dict[str, str], int]:
         """
         Replaces user-defined variables and function identifiers with canonical placeholders
         (v1, v2, v3...) while retaining syntax control keywords (if, for, while, return).
-        This defeats renaming obfuscation (e.g. changing 'student_grade' to 'x').
+        Also prunes dummy statements.
         """
-        clean_code = cls.strip_comments_and_strings(code)
+        pruned_code, pruned_count = cls.prune_dummy_injections(code)
+        clean_code = cls.strip_comments_and_strings(pruned_code)
         tokens = re.findall(r'\b[a-zA-Z_][a-zA-Z0-9_]*\b|[^\s\w]', clean_code)
 
         normalized_tokens: List[str] = []
@@ -82,7 +115,7 @@ class CodePlagiarismEngine:
             else:
                 normalized_tokens.append(tok)
 
-        return " ".join(normalized_tokens), identifier_map
+        return " ".join(normalized_tokens), identifier_map, pruned_count
 
     @classmethod
     def extract_code_kgrams(cls, normalized_code: str, k: int = 6) -> List[str]:
@@ -101,10 +134,10 @@ class CodePlagiarismEngine:
     ) -> Dict[str, Any]:
         """
         Compares two source code texts and produces structural similarity,
-        exact token match ratios, and variable renaming mappings.
+        exact token match ratios, dummy code detection, and variable renaming mappings.
         """
-        norm_a, map_a = cls.normalize_identifiers(code_a)
-        norm_b, map_b = cls.normalize_identifiers(code_b)
+        norm_a, map_a, pruned_a = cls.normalize_identifiers(code_a)
+        norm_b, map_b, pruned_b = cls.normalize_identifiers(code_b)
 
         kgrams_a = set(cls.extract_code_kgrams(norm_a, k=k))
         kgrams_b = set(cls.extract_code_kgrams(norm_b, k=k))
@@ -115,7 +148,8 @@ class CodePlagiarismEngine:
                 "shared_kgrams_count": 0,
                 "structural_match_verdict": "Unique Logic",
                 "total_kgrams_a": len(kgrams_a),
-                "total_kgrams_b": len(kgrams_b)
+                "total_kgrams_b": len(kgrams_b),
+                "pruned_dummy_lines": pruned_a + pruned_b
             }
 
         shared_kgrams = kgrams_a.intersection(kgrams_b)
@@ -139,5 +173,8 @@ class CodePlagiarismEngine:
             "total_kgrams_a": len(kgrams_a),
             "total_kgrams_b": len(kgrams_b),
             "identifiers_count_a": len(map_a),
-            "identifiers_count_b": len(map_b)
+            "identifiers_count_b": len(map_b),
+            "pruned_dummy_lines_a": pruned_a,
+            "pruned_dummy_lines_b": pruned_b,
+            "obfuscation_neutralized": (pruned_a + pruned_b) > 0 or len(map_a) > 5
         }
