@@ -42,6 +42,7 @@ function MainApp() {
   const [isLoading, setIsLoading] = useState(false);
   const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
   const [selectedMatch, setSelectedMatch] = useState(null);
+  const [filterSourceId, setFilterSourceId] = useState(null);
   const [isDiffOpen, setIsDiffOpen] = useState(false);
   const [citeMatch, setCiteMatch] = useState(null);
   const [isCodeModalOpen, setIsCodeModalOpen] = useState(false);
@@ -72,6 +73,8 @@ function MainApp() {
 
   const handleScanComplete = (reportData) => {
     setReport(reportData);
+    setSelectedMatch(null);
+    setFilterSourceId(null);
     if (reportData.remaining_credits !== undefined) {
       updateUserCredits(reportData.remaining_credits, reportData.subscription_tier);
     }
@@ -96,6 +99,8 @@ function MainApp() {
 
   const handleSelectHistoryReport = (historicalReport) => {
     setReport(historicalReport);
+    setSelectedMatch(null);
+    setFilterSourceId(null);
     setActiveTab('report');
   };
 
@@ -250,6 +255,9 @@ function MainApp() {
                 matches={report.matches}
                 selectedMatchId={selectedMatch?.id}
                 onSelectMatch={(m) => setSelectedMatch(m)}
+                filterSourceId={filterSourceId}
+                onClearFilter={() => setFilterSourceId(null)}
+                onGenerateCitation={(info) => setCiteMatch(info)}
               />
 
               {/* Explainable AI Perplexity & ESL Bias Shield Heatmap */}
@@ -273,7 +281,9 @@ function MainApp() {
               <SourcesSidebar
                 matches={report.matches}
                 selectedMatchId={selectedMatch?.id}
+                filterSourceId={filterSourceId}
                 onSelectMatch={(m) => setSelectedMatch(m)}
+                onFilterBySource={(srcId) => setFilterSourceId(srcId)}
                 onOpenDiff={handleOpenDiff}
                 onFlagMatch={handleFlagMatch}
                 onOpenCite={(m) => setCiteMatch(m)}

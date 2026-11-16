@@ -3,13 +3,13 @@ import { Loader2 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 
 const variantStyles = {
-  default: 'bg-slate-900 text-white hover:bg-slate-800 active:bg-slate-950 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-200 dark:active:bg-white shadow-xs border border-transparent',
+  default: 'bg-zinc-900 text-white hover:bg-zinc-800 active:bg-zinc-950 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200 dark:active:bg-white shadow-xs border border-transparent',
   primary: 'bg-indigo-600 text-white hover:bg-indigo-700 active:bg-indigo-800 shadow-xs border border-transparent',
-  secondary: 'bg-slate-100 text-slate-800 hover:bg-slate-200/80 active:bg-slate-300 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700 border border-slate-200/60 dark:border-slate-700/60',
+  secondary: 'bg-zinc-100 text-zinc-800 hover:bg-zinc-200/80 active:bg-zinc-300 dark:bg-zinc-800 dark:text-zinc-100 dark:hover:bg-zinc-700 border border-zinc-200/60 dark:border-zinc-700/60',
   destructive: 'bg-rose-600 text-white hover:bg-rose-700 active:bg-rose-800 shadow-xs border border-transparent',
-  outline: 'border border-slate-300 bg-white hover:bg-slate-50/80 text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800 shadow-2xs',
-  ghost: 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-300 dark:hover:text-white dark:hover:bg-slate-800/80',
-  link: 'text-slate-900 dark:text-slate-100 underline-offset-4 hover:underline p-0 h-auto font-medium',
+  outline: 'border border-zinc-300 bg-white hover:bg-zinc-50 text-zinc-800 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800/80 shadow-2xs',
+  ghost: 'text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:text-zinc-100 dark:hover:bg-zinc-800/80',
+  link: 'text-zinc-900 dark:text-zinc-100 underline-offset-4 hover:underline p-0 h-auto font-medium',
 };
 
 const sizeStyles = {
@@ -34,7 +34,7 @@ export const Button = forwardRef(({
       ref={ref}
       disabled={disabled || isLoading}
       className={cn(
-        'inline-flex items-center justify-center font-semibold rounded-lg transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 dark:focus-visible:ring-slate-600 disabled:pointer-events-none disabled:opacity-40 select-none cursor-pointer',
+        'inline-flex items-center justify-center font-semibold rounded-lg transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 dark:focus-visible:ring-zinc-600 disabled:pointer-events-none disabled:opacity-40 select-none cursor-pointer',
         variantStyles[variant] || variantStyles.default,
         sizeStyles[size] || sizeStyles.default,
         className
