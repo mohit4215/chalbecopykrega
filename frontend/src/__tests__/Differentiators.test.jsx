@@ -1,9 +1,12 @@
 import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import CitationAssistantModal from '../components/CitationAssistantModal';
 import AiSentenceHeatmap from '../components/AiSentenceHeatmap';
 import CodePlagiarismModal from '../components/CodePlagiarismModal';
+import OriginalityCertificateModal from '../components/OriginalityCertificateModal';
+import AdversarialEvasionBanner from '../components/AdversarialEvasionBanner';
+import DiffModal from '../components/DiffModal';
 import { AuthProvider } from '../context/AuthContext';
 
 describe('Turnitin Differentiators Component Tests', () => {
@@ -131,5 +134,141 @@ describe('Turnitin Differentiators Component Tests', () => {
     const closeBtn = screen.getByRole('button', { name: /Close/i });
     fireEvent.click(closeBtn);
     expect(handleClose).toHaveBeenCalledTimes(1);
+  });
+
+  test('OriginalityCertificateModal renders cryptographic certificate and handles close', () => {
+    const handleClose = jest.fn();
+    const mockReport = {
+      scan_id: 'scan_abcdef123456',
+      document_title: 'Quantum Neural Entanglement Thesis',
+      originality_score: 96,
+      overall_score: 4,
+      adversarial_integrity: {
+        sha256_hash: '3a4b5c6d7e8f90123456789abcdef0123456789abcdef0123456789abcdef01',
+        integrity_status: 'Verified Clean'
+      },
+      certificate: {
+        certificate_id: 'cert_scan_abcde',
+        document_title: 'Quantum Neural Entanglement Thesis',
+        sha256: '3a4b5c6d7e8f90123456789abcdef0123456789abcdef0123456789abcdef01',
+        issued_at: '2026-11-16T12:00:00Z',
+        overall_score: 4,
+        originality_score: 96,
+        ai_probability: 2,
+        integrity_status: 'Verified Clean',
+        verification_seal: 'Cryptographically Verified by Poach Academic Integrity Protocol',
+        verification_url: 'https://chalbecopykrega-app.onrender.com/verify/cert_scan_abcde'
+      }
+    };
+
+    render(
+      <OriginalityCertificateModal
+        report={mockReport}
+        isOpen={true}
+        onClose={handleClose}
+      />
+    );
+
+    expect(screen.getByText(/Official Originality Certificate/i)).toBeInTheDocument();
+    expect(screen.getByText(/Certificate ID:/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/cert_scan_abcde/i).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText(/Quantum Neural Entanglement Thesis/i)).toBeInTheDocument();
+    expect(screen.getByText(/96%/i)).toBeInTheDocument();
+    expect(screen.getByText(/Verified Clean/i)).toBeInTheDocument();
+
+    // Close button test
+    const closeBtn = screen.getByRole('button', { name: /^Close$/i });
+    fireEvent.click(closeBtn);
+    expect(handleClose).toHaveBeenCalledTimes(1);
+  });
+
+  test('AdversarialEvasionBanner warns about homoglyphs and expands tampering logs', () => {
+    const mockIntegrity = {
+      tampering_detected: true,
+      integrity_status: 'Evasion Attempt Neutralized',
+      integrity_score: 64.0,
+      homoglyphs_detected_count: 5,
+      zero_width_chars_count: 3,
+      detected_tampering: {
+        homoglyphs: [
+          {
+            char: 'а',
+            code_point: 'U+0430',
+            script: 'CYRILLIC SMALL LETTER A',
+            replaced_with: 'a',
+            context: 'mаchine'
+          }
+        ],
+        zero_width_characters: ['U+200B']
+      }
+    };
+
+    render(
+      <AdversarialEvasionBanner adversarialIntegrity={mockIntegrity} />
+    );
+
+    expect(screen.getByText(/Adversarial Evasion Attempt Neutralized/i)).toBeInTheDocument();
+    expect(screen.getByText(/5 Cyrillic\/Greek homoglyphs/i)).toBeInTheDocument();
+    expect(screen.getByText(/3 invisible characters/i)).toBeInTheDocument();
+
+    // Expand tampering logs
+    const inspectBtn = screen.getByRole('button', { name: /Inspect Intercepted Characters/i });
+    fireEvent.click(inspectBtn);
+
+    expect(screen.getByText(/U\+0430/i)).toBeInTheDocument();
+    expect(screen.getByText(/CYRILLIC SMALL LETTER A/i)).toBeInTheDocument();
+    expect(screen.getByText(/Document Integrity Score:/i)).toBeInTheDocument();
+  });
+
+  test('DiffModal allows tab switching to Student Remediation Sandbox and evaluating live revision', async () => {
+    const handleClose = jest.fn();
+    const mockRemediationResponse = {
+      initial_similarity: 88.0,
+      revised_similarity: 12.0,
+      similarity_reduction: 76.0,
+      remediation_success: true,
+      is_partial: false,
+      verdict: 'Successfully Remediated',
+      remaining_verbatim_phrases: [],
+      pedagogical_feedback: 'Outstanding synthesis! You reduced source similarity from 88.0% down to 12.0%.'
+    };
+
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => mockRemediationResponse,
+    });
+
+    render(
+      <DiffModal
+        match={mockMatch}
+        isOpen={true}
+        onClose={handleClose}
+      />
+    );
+
+    // Initial state: Diff tab active
+    expect(screen.getByText(/Side-by-Side Source Comparison/i)).toBeInTheDocument();
+    expect(screen.getByText(/Submitted Student Work/i)).toBeInTheDocument();
+
+    // Switch to Remediation Sandbox tab
+    const sandboxTab = screen.getByRole('button', { name: /Student Remediation Sandbox/i });
+    fireEvent.click(sandboxTab);
+
+    expect(screen.getByText(/Pedagogical Learning Sandbox vs\. Turnitin Punitive Flagging/i)).toBeInTheDocument();
+    expect(screen.getByText(/Your Rewritten Revision:/i)).toBeInTheDocument();
+
+    // Click Live Re-Check
+    const checkBtn = screen.getByRole('button', { name: /Live Re-Check Overlap/i });
+    fireEvent.click(checkBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Successfully Remediated/i)).toBeInTheDocument();
+    });
+
+    expect(screen.getByText(/Outstanding synthesis!/i)).toBeInTheDocument();
+    expect(screen.getByText(/-76%/i)).toBeInTheDocument();
+
+    // Cleanup fetch mock
+    global.fetch.mockRestore();
   });
 });

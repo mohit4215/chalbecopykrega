@@ -14,6 +14,8 @@ import ReportStickyHeader from './components/ReportStickyHeader';
 import DiffModal from './components/DiffModal';
 import CitationAssistantModal from './components/CitationAssistantModal';
 import CodePlagiarismModal from './components/CodePlagiarismModal';
+import OriginalityCertificateModal from './components/OriginalityCertificateModal';
+import AdversarialEvasionBanner from './components/AdversarialEvasionBanner';
 import AiSentenceHeatmap from './components/AiSentenceHeatmap';
 import HistoryDashboard from './components/HistoryDashboard';
 import PricingPage from './components/PricingPage';
@@ -42,6 +44,7 @@ function MainApp() {
   const [isDiffOpen, setIsDiffOpen] = useState(false);
   const [citeMatch, setCiteMatch] = useState(null);
   const [isCodeModalOpen, setIsCodeModalOpen] = useState(false);
+  const [isCertModalOpen, setIsCertModalOpen] = useState(false);
   const [flaggingMatch, setFlaggingMatch] = useState(null);
   const [authModal, setAuthModal] = useState(null); // null | 'login' | 'register'
   const [runManualTour, setRunManualTour] = useState(false);
@@ -207,7 +210,11 @@ function MainApp() {
             onDownloadPdf={handleDownloadPDF}
             isDownloadingPdf={isDownloadingPdf}
             onPrint={handlePrint}
+            onOpenCertificate={() => setIsCertModalOpen(true)}
           />
+
+          {/* Adversarial Evasion & Unicode Homoglyph Busting Banner */}
+          <AdversarialEvasionBanner adversarialIntegrity={report.adversarial_integrity} />
 
           {/* Source Code AST Banner */}
           {report.code_analysis && (
@@ -324,6 +331,13 @@ function MainApp() {
       <CodePlagiarismModal
         isOpen={isCodeModalOpen}
         onClose={() => setIsCodeModalOpen(false)}
+      />
+
+      {/* Official Cryptographic Originality Certificate Modal */}
+      <OriginalityCertificateModal
+        report={report}
+        isOpen={isCertModalOpen}
+        onClose={() => setIsCertModalOpen(false)}
       />
 
       {/* Flag Incorrect Match / False Positive Modal */}

@@ -9,7 +9,8 @@ import {
   AlertCircle,
   Shield,
   EyeOff,
-  Code2
+  Code2,
+  Award
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { cn } from '../lib/utils';
@@ -25,6 +26,7 @@ export default function ReportStickyHeader({
   onDownloadPdf,
   isDownloadingPdf,
   onPrint,
+  onOpenCertificate,
 }) {
   if (!report) return null;
 
@@ -174,8 +176,21 @@ export default function ReportStickyHeader({
           </div>
         </div>
 
-        {/* Right: Actions (Download PDF, Print, New Scan) */}
+        {/* Right: Actions (Certificate, Download PDF, Print, New Scan) */}
         <div className="flex items-center gap-2.5 self-end md:self-center">
+          {onOpenCertificate && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={onOpenCertificate}
+              className="border-amber-300 dark:border-amber-700 bg-amber-50/70 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/60 font-bold"
+              title="View & verify cryptographic originality certificate"
+            >
+              <Award className="w-3.5 h-3.5 mr-1.5 text-amber-600 dark:text-amber-400" />
+              <span>Certificate</span>
+            </Button>
+          )}
+
           <Button
             size="sm"
             onClick={onDownloadPdf}
