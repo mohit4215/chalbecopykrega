@@ -27,7 +27,7 @@ class TestAsyncPlagiarismPipeline:
             response = await client.post(
                 "/api/check-plagiarism",
                 files=files,
-                data={"enable_web_search": "false"},
+                data={"enable_web_search": "false", "auto_index": "true"},
                 headers=auth_headers
             )
             assert response.status_code == 202
@@ -35,6 +35,39 @@ class TestAsyncPlagiarismPipeline:
             assert data["task_id"] == "mock_task_id_celery_12345"
             assert data["status"] == "processing"
             assert "queued" in data["message"].lower()
+
+    @pytest.mark.asyncio
+    async def test_check_plagiarism_auto_index_propagation(
+        self,
+        client: AsyncClient,
+        auth_headers: dict,
+        test_user: User
+    ):
+        file_bytes = b"Deep learning auto index testing with institutional repository."
+        files = {
+            "file": ("auto_index_paper.txt", io.BytesIO(file_bytes), "text/plain")
+        }
+
+        mock_celery_task = MagicMock()
+        mock_celery_task.id = "mock_task_auto_index_999"
+
+        with patch("app.tasks.celery_worker.process_plagiarism_document.delay", return_value=mock_celery_task) as mock_delay:
+            res = await client.post(
+                "/api/check-plagiarism",
+                files=files,
+                data={
+                    "enable_web_search": "false",
+                    "esl_mode": "false",
+                    "ephemeral_mode": "false",
+                    "auto_index": "true"
+                },
+                headers=auth_headers
+            )
+            assert res.status_code == 202
+            assert mock_delay.called
+            _, kwargs = mock_delay.call_args
+            assert kwargs["auto_index"] is True
+            assert kwargs["ephemeral_mode"] is False
 
     @pytest.mark.asyncio
     async def test_polling_task_status_pending(self, client: AsyncClient, auth_headers: dict):

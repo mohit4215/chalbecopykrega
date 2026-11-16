@@ -10,7 +10,8 @@ import {
   Shield,
   EyeOff,
   Code2,
-  Award
+  Award,
+  Database
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { cn } from '../lib/utils';
@@ -152,6 +153,13 @@ export default function ReportStickyHeader({
                 <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border bg-teal-50 text-teal-700 border-teal-200 dark:bg-teal-950/40 dark:text-teal-300 dark:border-teal-800 flex items-center gap-1">
                   <Code2 className="w-3 h-3" />
                   AST Protected
+                </span>
+              )}
+
+              {report.indexed_in_repository && !report.ephemeral_mode && (
+                <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-950/40 dark:text-indigo-300 dark:border-indigo-800 flex items-center gap-1">
+                  <Database className="w-3 h-3" />
+                  Corpus Indexed
                 </span>
               )}
             </div>
