@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ThemeProvider } from './context/ThemeContext';
 import { ToastProvider, useToast } from './components/ui/toast';
-import { ShieldCheck, X } from 'lucide-react';
+import { ShieldCheck, X, Code2 } from 'lucide-react';
 
 import AppShell from './components/layout/AppShell';
 import UploadComponent from './components/UploadComponent';
@@ -11,6 +11,9 @@ import DocumentViewer from './components/DocumentViewer';
 import SourcesSidebar from './components/SourcesSidebar';
 import ReportStickyHeader from './components/ReportStickyHeader';
 import DiffModal from './components/DiffModal';
+import CitationAssistantModal from './components/CitationAssistantModal';
+import CodePlagiarismModal from './components/CodePlagiarismModal';
+import AiSentenceHeatmap from './components/AiSentenceHeatmap';
 import HistoryDashboard from './components/HistoryDashboard';
 import PricingPage from './components/PricingPage';
 import BillingDashboard from './components/BillingDashboard';
@@ -36,6 +39,8 @@ function MainApp() {
   const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
   const [selectedMatch, setSelectedMatch] = useState(null);
   const [isDiffOpen, setIsDiffOpen] = useState(false);
+  const [citeMatch, setCiteMatch] = useState(null);
+  const [isCodeModalOpen, setIsCodeModalOpen] = useState(false);
   const [flaggingMatch, setFlaggingMatch] = useState(null);
   const [authModal, setAuthModal] = useState(null); // null | 'login' | 'register'
   const [runManualTour, setRunManualTour] = useState(false);
@@ -164,6 +169,7 @@ function MainApp() {
         }
       }}
       onStartTour={() => setRunManualTour(true)}
+      onOpenCodeInspector={() => setIsCodeModalOpen(true)}
       report={report}
     >
       {/* Route Views */}
@@ -202,16 +208,46 @@ function MainApp() {
             onPrint={handlePrint}
           />
 
+          {/* Source Code AST Banner */}
+          {report.code_analysis && (
+            <div className="mb-4 p-3.5 bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-950/40 dark:to-teal-950/40 border border-emerald-200 dark:border-emerald-800 rounded-2xl flex items-center justify-between text-xs">
+              <div className="flex items-center gap-2.5">
+                <div className="p-1.5 rounded-lg bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300">
+                  <Code2 className="w-4 h-4" />
+                </div>
+                <div>
+                  <p className="font-bold text-slate-800 dark:text-slate-100">
+                    Source Code AST Structural Protection Active
+                  </p>
+                  <p className="text-slate-500 dark:text-slate-400">
+                    Identifiers normalized across {report.code_analysis.unique_identifiers_count || 'all'} tokens • Variable-renaming obfuscation neutralized
+                  </p>
+                </div>
+              </div>
+              <Button size="xs" variant="outline" onClick={() => setIsCodeModalOpen(true)}>
+                Open AST Inspector
+              </Button>
+            </div>
+          )}
+
           {/* Split Screen Layout */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start flex-1 min-h-[660px]">
-            {/* Left Pane (8 Cols): Full Document Viewer with Bi-directional Highlight Sync */}
-            <div className="lg:col-span-8 h-full min-h-[640px] flex flex-col">
+            {/* Left Pane (8 Cols): Full Document Viewer & Explainable AI Heatmap */}
+            <div className="lg:col-span-8 flex flex-col space-y-6">
               <DocumentViewer
                 fullText={report.full_text}
                 matches={report.matches}
                 selectedMatchId={selectedMatch?.id}
                 onSelectMatch={(m) => setSelectedMatch(m)}
               />
+
+              {/* Explainable AI Perplexity & ESL Bias Shield Heatmap */}
+              {report.ai_detection && (
+                <AiSentenceHeatmap
+                  aiDetection={report.ai_detection}
+                  documentText={report.full_text}
+                />
+              )}
             </div>
 
             {/* Right Pane (4 Cols): Matched Sources Sidebar & Score Breakdown */}
@@ -229,6 +265,7 @@ function MainApp() {
                 onSelectMatch={(m) => setSelectedMatch(m)}
                 onOpenDiff={handleOpenDiff}
                 onFlagMatch={handleFlagMatch}
+                onOpenCite={(m) => setCiteMatch(m)}
               />
             </div>
           </div>
@@ -272,6 +309,20 @@ function MainApp() {
         isOpen={isDiffOpen}
         onClose={() => setIsDiffOpen(false)}
         onFlagMatch={handleFlagMatch}
+        onOpenCite={(m) => setCiteMatch(m)}
+      />
+
+      {/* 1-Click Smart Academic Citation Assistant Modal */}
+      <CitationAssistantModal
+        match={citeMatch}
+        isOpen={!!citeMatch}
+        onClose={() => setCiteMatch(null)}
+      />
+
+      {/* Source Code Plagiarism & AST Renaming Inspector */}
+      <CodePlagiarismModal
+        isOpen={isCodeModalOpen}
+        onClose={() => setIsCodeModalOpen(false)}
       />
 
       {/* Flag Incorrect Match / False Positive Modal */}

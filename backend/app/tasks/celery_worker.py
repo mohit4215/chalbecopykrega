@@ -17,6 +17,8 @@ from app.services.core_engine import (
 )
 from app.services.ai_detector import AIDetectionEngine
 from app.services.citation_filter import AcademicCitationFilter
+from app.services.code_plagiarism import CodePlagiarismEngine
+from app.services.citation_generator import SmartCitationGenerator
 
 logger = logging.getLogger("plagiarism.celery")
 
@@ -248,7 +250,9 @@ def process_plagiarism_document(
     temp_file_path: str,
     filename: str,
     user_id: str,
-    enable_web_search: bool = True
+    enable_web_search: bool = True,
+    esl_mode: bool = False,
+    ephemeral_mode: bool = False
 ) -> Dict[str, Any]:
     """
     Asynchronous Celery background task:
@@ -257,10 +261,12 @@ def process_plagiarism_document(
       3. Queries Qdrant vector DB (student-to-student comparison)
       4. Queries live internet sources via SerpAPI / Bing
       5. Evaluates hybrid N-gram Jaccard and dense cosine similarity
-      6. Persists originality report to PostgreSQL and deducts user credit
+      6. Executes Source Code Structural Plagiarism analysis if programming file
+      7. Enriches matches with 1-Click Smart Citations (APA, MLA, Chicago)
+      8. Persists originality report to PostgreSQL (or Zero-Knowledge Ephemeral discard)
     """
     task_id = self.request.id
-    logger.info(f"Task {task_id}: Started asynchronous audit for {filename} (User: {user_id})")
+    logger.info(f"Task {task_id}: Started asynchronous audit for {filename} (User: {user_id}, ESL: {esl_mode}, Ephemeral: {ephemeral_mode})")
 
     try:
         # Step 1: Text extraction & OCR fallback
@@ -302,7 +308,7 @@ def process_plagiarism_document(
             )
         )
 
-        # Step 4: Formatting matches
+        # Step 4: Formatting matches with 1-Click Smart Citations
         report_progress(
             self,
             "scoring",
@@ -314,6 +320,20 @@ def process_plagiarism_document(
         for idx, match_item in enumerate(scan_report.get("matches", [])):
             chunk_idx = match_item["chunk_index"]
             corresponding_chunk = chunks[chunk_idx]
+            source_title = match_item["source_title"] or "Academic Reference Literature"
+            source_author = match_item.get("source_author")
+            source_url = match_item.get("source_url")
+            source_category = match_item.get("source_category", "Institutional Repository")
+
+            # 1-Click Smart Academic Citation Assistant
+            citations = SmartCitationGenerator.generate_all_citations(
+                matched_text=corresponding_chunk.text,
+                source_title=source_title,
+                source_author=source_author,
+                source_url=source_url,
+                institution=source_category
+            )
+
             formatted_matches.append({
                 "id": f"match_{idx}_{uuid.uuid4().hex[:6]}",
                 "matched_text": corresponding_chunk.text,
@@ -321,18 +341,19 @@ def process_plagiarism_document(
                 "end_index": corresponding_chunk.end_char,
                 "similarity_score": match_item["confidence_score"],
                 "match_type": match_item["match_type"],
-                "source_title": match_item["source_title"],
-                "source_url": match_item.get("source_url"),
+                "source_title": source_title,
+                "source_url": source_url,
                 "source_id": match_item.get("source_id"),
-                "source_author": match_item.get("source_author"),
+                "source_author": source_author,
                 "source_snippet": match_item.get("source_snippet"),
-                "source_category": match_item.get("source_category", "Internet Source")
+                "source_category": source_category,
+                "smart_citations": citations
             })
 
         new_scan_id = str(uuid.uuid4())
         
-        # Enterprise Detection: Synthetic AI Writing & Citation Exclusions
-        ai_analysis = AIDetectionEngine.analyze_text(extraction_result.cleaned_text)
+        # Enterprise Detection: Synthetic AI Writing with ESL Student Bias Shield
+        ai_analysis = AIDetectionEngine.analyze_text(extraction_result.cleaned_text, esl_mode=esl_mode)
         citation_filter_result = AcademicCitationFilter.apply_filters(
             full_text=extraction_result.cleaned_text,
             matches=formatted_matches,
@@ -341,6 +362,22 @@ def process_plagiarism_document(
             min_match_words=8,
             total_words=extraction_result.metadata.total_words
         )
+
+        # Source Code Plagiarism Detection (AST identifier normalization & renaming resistance)
+        is_code = CodePlagiarismEngine.is_code_file(filename)
+        code_analysis = None
+        if is_code:
+            norm_tokens, id_map = CodePlagiarismEngine.normalize_identifiers(extraction_result.cleaned_text)
+            kgrams = CodePlagiarismEngine.extract_code_kgrams(norm_tokens)
+            ext = os.path.splitext(filename)[1].lower()
+            code_analysis = {
+                "is_code_document": True,
+                "detected_language": CodePlagiarismEngine.SUPPORTED_EXTENSIONS.get(ext, "source_code"),
+                "normalized_tokens_sample": norm_tokens[:250] + ("..." if len(norm_tokens) > 250 else ""),
+                "unique_identifiers_count": len(id_map),
+                "structural_kgrams_count": len(kgrams),
+                "renaming_protection": "Active (Tokens mapped to canonical placeholders v1, v2...)"
+            }
 
         final_payload = {
             "scan_id": new_scan_id,
@@ -355,6 +392,10 @@ def process_plagiarism_document(
             "remaining_credits": 0,
             "subscription_tier": "free",
             "full_text": extraction_result.cleaned_text,
+            "esl_mode": esl_mode,
+            "ephemeral_mode": ephemeral_mode,
+            "zero_retention_guaranteed": ephemeral_mode,
+            "code_analysis": code_analysis,
             "summary": {
                 "exact_matches_count": scan_report["summary"]["exact_matches_count"],
                 "paraphrase_matches_count": scan_report["summary"]["paraphrase_matches_count"],
@@ -365,7 +406,7 @@ def process_plagiarism_document(
             "citation_exclusions": citation_filter_result["filters_applied"]
         }
 
-        # Step 5: Persist to database & deduct credit
+        # Step 5: Persist to database & deduct credit (unless Zero-Knowledge Ephemeral Mode is active)
         async def persist_db():
             async with AsyncSessionLocal() as db:
                 res = await db.execute(select(User).where(User.id == user_id))
@@ -377,14 +418,15 @@ def process_plagiarism_document(
                     final_payload["remaining_credits"] = u.scan_credits
                     final_payload["subscription_tier"] = u.subscription_tier
 
-                scan_record = ScanHistory(
-                    id=new_scan_id,
-                    user_id=user_id,
-                    filename=filename,
-                    overall_score=scan_report["overall_plagiarism_percentage"],
-                    report_json=final_payload
-                )
-                db.add(scan_record)
+                if not ephemeral_mode:
+                    scan_record = ScanHistory(
+                        id=new_scan_id,
+                        user_id=user_id,
+                        filename=filename,
+                        overall_score=scan_report["overall_plagiarism_percentage"],
+                        report_json=final_payload
+                    )
+                    db.add(scan_record)
                 await db.commit()
 
         _run_coroutine(persist_db())

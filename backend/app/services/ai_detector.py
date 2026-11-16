@@ -12,13 +12,10 @@ from typing import Dict, Any, List, Tuple
 
 
 class AIDetectionEngine:
-    """Multi-signal heuristic and statistical AI writing detector."""
+    """Multi-signal heuristic and statistical AI writing detector with ESL bias mitigation."""
 
-    # Characteristic AI discourse markers and transition patterns
-    AI_MARKERS = [
-        r"\bin conclusion\b",
-        r"\bit is crucial to\b",
-        r"\bit is important to note\b",
+    # Deep hallmark LLM stylistic patterns & clichés (GPT-4, Claude, Gemini)
+    LLM_BUZZWORDS = [
         r"\bdelves into\b",
         r"\btestament to\b",
         r"\bmultifaceted\b",
@@ -30,27 +27,41 @@ class AIDetectionEngine:
         r"\bvital role in shaping\b",
         r"\bpivotal role\b",
         r"\bplays a crucial role\b",
-        r"\bfurthermore\b",
-        r"\bmoreover\b",
-        r"\bhenceforth\b",
         r"\bseamlessly integrate[s|d]?\b",
         r"\bboth .* and .* align\b",
         r"\bby exploring these nuances\b",
         r"\bit cannot be understated\b",
         r"\bdeep dive\b",
         r"\bharnessing the power\b",
-        r"\bnavigating the complexities\b"
+        r"\bnavigating the complexities\b",
+        r"\bit is crucial to\b",
+        r"\bit is important to note\b"
     ]
 
+    # Standard academic and ESL classroom transitions
+    GENERIC_TRANSITIONS = [
+        r"\bin conclusion\b",
+        r"\bfurthermore\b",
+        r"\bmoreover\b",
+        r"\badditionally\b",
+        r"\bhenceforth\b",
+        r"\bin summary\b",
+        r"\bto summarize\b"
+    ]
+
+    # Combined markers for general detection
+    AI_MARKERS = LLM_BUZZWORDS + GENERIC_TRANSITIONS
+
     @classmethod
-    def analyze_text(cls, text: str) -> Dict[str, Any]:
+    def analyze_text(cls, text: str, esl_mode: bool = False) -> Dict[str, Any]:
         """
         Analyzes document text and returns multi-dimensional AI writing metrics:
           - ai_probability (0.0 - 100.0%)
           - human_probability (0.0 - 100.0%)
-          - verdict: "Human-Authored", "Mixed / AI-Assisted", "Likely AI-Generated"
-          - sentence_analyses: sentence-by-sentence heatmap tagging
+          - verdict: "Human-Authored", "Mixed / AI-Assisted", "Likely AI-Generated", "Highly Likely AI-Generated"
+          - sentence_analyses: sentence-by-sentence heatmap tagging with explainable linguistic cues
           - metrics: burstiness, vocabulary richness, discourse markers
+          - esl_shield_applied: indicates if non-native speaker false-positive mitigation was active
         """
         clean_text = (text or "").strip()
         if not clean_text or len(clean_text.split()) < 15:
@@ -59,6 +70,8 @@ class AIDetectionEngine:
                 "human_probability": 100.0,
                 "verdict": "Human-Authored",
                 "confidence": "Low (Insufficient sample size)",
+                "esl_mode": esl_mode,
+                "esl_shield_applied": False,
                 "sentence_analyses": [],
                 "metrics": {
                     "burstiness_score": 1.0,
@@ -78,6 +91,8 @@ class AIDetectionEngine:
                 "ai_probability": 0.0,
                 "human_probability": 100.0,
                 "verdict": "Human-Authored",
+                "esl_mode": esl_mode,
+                "esl_shield_applied": False,
                 "sentence_analyses": [],
                 "metrics": {}
             }
@@ -96,11 +111,11 @@ class AIDetectionEngine:
 
         # Lower burstiness indicates higher AI likelihood
         if burstiness_cv < 0.25:
-            burstiness_ai_signal = 0.85
+            burstiness_ai_signal = 0.50 if esl_mode else 0.85
         elif burstiness_cv < 0.40:
-            burstiness_ai_signal = 0.65
+            burstiness_ai_signal = 0.40 if esl_mode else 0.65
         elif burstiness_cv < 0.55:
-            burstiness_ai_signal = 0.40
+            burstiness_ai_signal = 0.25 if esl_mode else 0.40
         else:
             burstiness_ai_signal = 0.15
 
@@ -109,16 +124,18 @@ class AIDetectionEngine:
         ttr = len(unique_words) / max(1, total_words)
         # Root TTR (Guiraud's Index) to compensate for document length
         guiraud_r = len(unique_words) / math.sqrt(max(1, total_words))
-        # High predictability in LLMs often manifests as standardized, moderate TTR
+        
         lexical_signal = 0.5
         if guiraud_r < 6.5:
-            lexical_signal = 0.70  # Limited vocabulary redundancy
+            # Under ESL mode, limited vocabulary is natural and not penalized as heavily
+            lexical_signal = 0.40 if esl_mode else 0.70
         elif guiraud_r > 12.0:
-            lexical_signal = 0.25  # High human vocabulary variance
+            lexical_signal = 0.25
 
         # 4. Characteristic AI Marker Density
+        active_markers = cls.LLM_BUZZWORDS if esl_mode else cls.AI_MARKERS
         ai_marker_matches = 0
-        for pattern in cls.AI_MARKERS:
+        for pattern in active_markers:
             ai_marker_matches += len(re.findall(pattern, clean_text, re.IGNORECASE))
         
         # Density per 100 words
@@ -132,7 +149,7 @@ class AIDetectionEngine:
         else:
             marker_signal = 0.15
 
-        # 5. Sentence-by-sentence evaluation for UI Heatmap
+        # 5. Sentence-by-sentence evaluation for Explainable UI Heatmap
         sentence_analyses: List[Dict[str, Any]] = []
         ai_sentence_count = 0
 
@@ -140,39 +157,69 @@ class AIDetectionEngine:
             s_words = re.findall(r"\b\w+\b", s.lower())
             w_len = len(s_words)
             s_score = 0.2  # Base probability
+            linguistic_cues: List[str] = []
 
-            # Check sentence markers
-            has_marker = any(re.search(pat, s, re.IGNORECASE) for pat in cls.AI_MARKERS)
-            if has_marker:
+            # Check LLM buzzwords
+            matched_buzzwords = [pat for pat in cls.LLM_BUZZWORDS if re.search(pat, s, re.IGNORECASE)]
+            if matched_buzzwords:
                 s_score += 0.45
+                clean_marker_name = matched_buzzwords[0].replace(r"\b", "").replace(r"[s|d]?", "")
+                linguistic_cues.append(f"Synthetic LLM cliché pattern: '{clean_marker_name}'")
+
+            # Check generic classroom transitions
+            matched_transitions = [pat for pat in cls.GENERIC_TRANSITIONS if re.search(pat, s, re.IGNORECASE)]
+            if matched_transitions:
+                clean_trans = matched_transitions[0].replace(r"\b", "")
+                if esl_mode:
+                    linguistic_cues.append(f"Standard transition '{clean_trans}' (cleared by ESL Shield)")
+                else:
+                    s_score += 0.20
+                    linguistic_cues.append(f"Formal transition formula: '{clean_trans}'")
 
             # Uniformity penalty
             if abs(w_len - mean_length) < 3 and 12 <= w_len <= 26:
-                s_score += 0.25
+                if esl_mode:
+                    s_score += 0.08
+                    linguistic_cues.append(f"Uniform syntax ({w_len} words) - calibrated for ESL")
+                else:
+                    s_score += 0.25
+                    linguistic_cues.append(f"Uniform sentence length ({w_len} words) fits LLM cadence")
+            elif abs(w_len - mean_length) >= 6:
+                linguistic_cues.append(f"Human length variance ({w_len} words)")
 
-            # Repetition of formal transitions
-            if s.startswith(("Furthermore,", "Moreover,", "Additionally,", "In conclusion,", "Ultimately,")):
-                s_score += 0.20
+            if not linguistic_cues:
+                linguistic_cues.append("Natural stylistic phrasing")
 
             final_s_score = min(0.99, max(0.01, round(s_score, 2)))
-            is_flagged = final_s_score >= 0.60
+            threshold = 0.65 if esl_mode else 0.60
+            is_flagged = final_s_score >= threshold
             if is_flagged:
                 ai_sentence_count += 1
 
             sentence_analyses.append({
                 "sentence": s,
                 "ai_score": final_s_score,
-                "is_ai_flagged": is_flagged
+                "is_ai_flagged": is_flagged,
+                "linguistic_cues": linguistic_cues
             })
 
         # 6. Synthesize composite AI probability
         sentence_ai_ratio = ai_sentence_count / max(1, total_sentences)
-        composite_score = (
-            burstiness_ai_signal * 0.35 +
-            marker_signal * 0.35 +
-            sentence_ai_ratio * 0.20 +
-            lexical_signal * 0.10
-        )
+        if esl_mode:
+            # Weighted more heavily towards concrete synthetic buzzwords, less towards structural uniformity
+            composite_score = (
+                marker_signal * 0.45 +
+                burstiness_ai_signal * 0.20 +
+                sentence_ai_ratio * 0.25 +
+                lexical_signal * 0.10
+            )
+        else:
+            composite_score = (
+                burstiness_ai_signal * 0.35 +
+                marker_signal * 0.35 +
+                sentence_ai_ratio * 0.20 +
+                lexical_signal * 0.10
+            )
 
         ai_percentage = round(min(99.0, max(1.0, composite_score * 100.0)), 1)
         human_percentage = round(100.0 - ai_percentage, 1)
@@ -192,6 +239,13 @@ class AIDetectionEngine:
             "human_probability": human_percentage,
             "verdict": verdict,
             "confidence": "High" if total_words > 100 else "Moderate",
+            "esl_mode": esl_mode,
+            "esl_shield_applied": esl_mode,
+            "bias_shield_notes": (
+                "ESL Student Bias Shield Active: Standard classroom transitions and syntactic uniformity "
+                "are calibrated to eliminate false accusations against non-native English writers."
+                if esl_mode else None
+            ),
             "sentence_analyses": sentence_analyses,
             "metrics": {
                 "burstiness_score": round(burstiness_cv, 2),

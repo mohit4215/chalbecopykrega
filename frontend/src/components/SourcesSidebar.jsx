@@ -1,5 +1,5 @@
 import React from 'react';
-import { Globe, Layers, ExternalLink, ChevronRight, CheckCircle2, Flag } from 'lucide-react';
+import { Globe, Layers, ExternalLink, ChevronRight, CheckCircle2, Flag, Quote } from 'lucide-react';
 import { cn } from '../lib/utils';
 
 export default function SourcesSidebar({
@@ -8,6 +8,7 @@ export default function SourcesSidebar({
   onSelectMatch,
   onOpenDiff,
   onFlagMatch,
+  onOpenCite,
 }) {
   const getDomainName = (url) => {
     if (!url) return null;
@@ -161,6 +162,22 @@ export default function SourcesSidebar({
                 </span>
 
                 <div className="flex items-center gap-2">
+                  {onOpenCite && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onSelectMatch(m);
+                        onOpenCite(m);
+                      }}
+                      className="px-2 py-1 bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 text-emerald-700 dark:text-emerald-300 font-bold rounded-lg flex items-center gap-1 transition"
+                      title="Generate APA, MLA, or Chicago Citation"
+                    >
+                      <Quote className="w-3 h-3" />
+                      <span>Cite</span>
+                    </button>
+                  )}
+
                   {onFlagMatch && (
                     <button
                       type="button"
