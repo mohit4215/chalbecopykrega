@@ -15,6 +15,7 @@ import DiffModal from './components/DiffModal';
 import CitationAssistantModal from './components/CitationAssistantModal';
 import CodePlagiarismModal from './components/CodePlagiarismModal';
 import OriginalityCertificateModal from './components/OriginalityCertificateModal';
+import CohortCollusionModal from './components/CohortCollusionModal';
 import AdversarialEvasionBanner from './components/AdversarialEvasionBanner';
 import AiSentenceHeatmap from './components/AiSentenceHeatmap';
 import HistoryDashboard from './components/HistoryDashboard';
@@ -45,6 +46,7 @@ function MainApp() {
   const [citeMatch, setCiteMatch] = useState(null);
   const [isCodeModalOpen, setIsCodeModalOpen] = useState(false);
   const [isCertModalOpen, setIsCertModalOpen] = useState(false);
+  const [isCohortModalOpen, setIsCohortModalOpen] = useState(false);
   const [flaggingMatch, setFlaggingMatch] = useState(null);
   const [authModal, setAuthModal] = useState(null); // null | 'login' | 'register'
   const [runManualTour, setRunManualTour] = useState(false);
@@ -174,6 +176,7 @@ function MainApp() {
       }}
       onStartTour={() => setRunManualTour(true)}
       onOpenCodeInspector={() => setIsCodeModalOpen(true)}
+      onOpenCohortCollusion={() => setIsCohortModalOpen(true)}
       report={report}
     >
       {/* Route Views */}
@@ -338,6 +341,12 @@ function MainApp() {
         report={report}
         isOpen={isCertModalOpen}
         onClose={() => setIsCertModalOpen(false)}
+      />
+
+      {/* Cross-Cohort Collusion Matrix & Peer Ring Detector */}
+      <CohortCollusionModal
+        isOpen={isCohortModalOpen}
+        onClose={() => setIsCohortModalOpen(false)}
       />
 
       {/* Flag Incorrect Match / False Positive Modal */}

@@ -53,6 +53,7 @@ from app.services.code_plagiarism import CodePlagiarismEngine
 from app.services.citation_generator import SmartCitationGenerator
 from app.services.adversarial_detector import AdversarialDetector
 from app.services.remediation_engine import RemediationEngine
+from app.services.collusion_detector import CohortCollusionDetector
 from app.services.task_stream import subscribe_task_events, publish_task_event
 from app.services.storage_service import StorageService
 from app.services.stripe_service import StripeService, PLANS
@@ -252,6 +253,16 @@ class RemediationRequest(BaseModel):
     original_text: str = Field(..., min_length=2, description="Original flagged sentence")
     revised_text: str = Field(..., min_length=2, description="Student rewritten revision")
     source_text: str = Field(..., min_length=2, description="Original reference source text")
+
+class CohortSubmissionItem(BaseModel):
+    id: Optional[str] = None
+    student_name: str = Field(..., min_length=1, description="Student or author identifier")
+    title: Optional[str] = Field(default="Assignment Submission", description="Title of submission")
+    text: str = Field(..., min_length=10, description="Full text of submission")
+
+class CohortCollusionRequest(BaseModel):
+    threshold: Optional[float] = Field(default=35.0, ge=5.0, le=95.0, description="Collusion detection percentage threshold")
+    submissions: List[CohortSubmissionItem] = Field(..., min_length=2, description="List of cohort submissions (minimum 2)")
 
 class CreateRepositoryDocumentRequest(BaseModel):
     title: str = Field(..., min_length=2, max_length=255)
@@ -1883,6 +1894,19 @@ async def evaluate_remediation(payload: RemediationRequest):
         original_text=payload.original_text,
         revised_text=payload.revised_text,
         source_text=payload.source_text
+    )
+
+
+@app.post("/api/cohort/collusion-matrix")
+async def analyze_cohort_collusion(payload: CohortCollusionRequest):
+    """
+    Multi-Student Cohort Collusion & Peer-Sharing Ring Detection API.
+    Cross-references an entire classroom or assignment batch simultaneously, generating an
+    N x N similarity matrix and isolating peer-to-peer sharing clusters and ghostwriting networks.
+    """
+    return CohortCollusionDetector.analyze_cohort(
+        submissions=[s.model_dump() for s in payload.submissions],
+        threshold=payload.threshold or 35.0
     )
 
 

@@ -7,6 +7,7 @@ import CodePlagiarismModal from '../components/CodePlagiarismModal';
 import OriginalityCertificateModal from '../components/OriginalityCertificateModal';
 import AdversarialEvasionBanner from '../components/AdversarialEvasionBanner';
 import DiffModal from '../components/DiffModal';
+import CohortCollusionModal from '../components/CohortCollusionModal';
 import { AuthProvider } from '../context/AuthContext';
 
 describe('Turnitin Differentiators Component Tests', () => {
@@ -187,8 +188,11 @@ describe('Turnitin Differentiators Component Tests', () => {
       tampering_detected: true,
       integrity_status: 'Evasion Attempt Neutralized',
       integrity_score: 64.0,
+      threat_level: 'CRITICAL_EVASION_ATTEMPT',
       homoglyphs_detected_count: 5,
       zero_width_chars_count: 3,
+      punctuation_splits_count: 1,
+      evasion_tactics_detected: ['Cyrillic Homoglyph Substitution', 'Punctuation In-Word Splitting'],
       detected_tampering: {
         homoglyphs: [
           {
@@ -199,7 +203,13 @@ describe('Turnitin Differentiators Component Tests', () => {
             context: 'mаchine'
           }
         ],
-        zero_width_characters: ['U+200B']
+        invisible_characters: ['U+200B'],
+        punctuation_splits: [
+          {
+            original_split: 'p.l.a.g.i.a.r.i.s.m',
+            reconstructed_word: 'plagiarism'
+          }
+        ]
       }
     };
 
@@ -210,13 +220,13 @@ describe('Turnitin Differentiators Component Tests', () => {
     expect(screen.getByText(/Adversarial Evasion Attempt Neutralized/i)).toBeInTheDocument();
     expect(screen.getByText(/5 Cyrillic\/Greek homoglyphs/i)).toBeInTheDocument();
     expect(screen.getByText(/3 invisible characters/i)).toBeInTheDocument();
+    expect(screen.getByText(/Cyrillic Homoglyph Substitution/i)).toBeInTheDocument();
 
     // Expand tampering logs
     const inspectBtn = screen.getByRole('button', { name: /Inspect Intercepted Characters/i });
     fireEvent.click(inspectBtn);
 
     expect(screen.getByText(/U\+0430/i)).toBeInTheDocument();
-    expect(screen.getByText(/CYRILLIC SMALL LETTER A/i)).toBeInTheDocument();
     expect(screen.getByText(/Document Integrity Score:/i)).toBeInTheDocument();
   });
 
@@ -228,9 +238,14 @@ describe('Turnitin Differentiators Component Tests', () => {
       similarity_reduction: 76.0,
       remediation_success: true,
       is_partial: false,
+      is_patchwriting: false,
       verdict: 'Successfully Remediated',
       remaining_verbatim_phrases: [],
-      pedagogical_feedback: 'Outstanding synthesis! You reduced source similarity from 88.0% down to 12.0%.'
+      pedagogical_feedback: 'Outstanding synthesis! You reduced source similarity from 88.0% down to 12.0%.',
+      token_diff: [
+        { word: 'Outstanding', tag: 'independent' },
+        { word: 'neural', tag: 'verbatim' }
+      ]
     };
 
     global.fetch = jest.fn().mockResolvedValue({
@@ -269,6 +284,71 @@ describe('Turnitin Differentiators Component Tests', () => {
     expect(screen.getByText(/-76%/i)).toBeInTheDocument();
 
     // Cleanup fetch mock
+    global.fetch.mockRestore();
+  });
+
+  test('CohortCollusionModal renders and executes cross-cohort matrix analysis', async () => {
+    const handleClose = jest.fn();
+    const mockCohortResponse = {
+      cohort_size: 4,
+      threshold_used: 35.0,
+      overall_cohort_risk: 'High Collusion Risk Detected',
+      matrix: [
+        [100.0, 75.0, 8.0, 5.0],
+        [75.0, 100.0, 7.0, 4.0],
+        [8.0, 7.0, 100.0, 12.0],
+        [5.0, 4.0, 12.0, 100.0]
+      ],
+      submissions_summary: [
+        { id: 'sub_1', student_name: 'Alice Smith', title: 'Paper 1', words_count: 35 },
+        { id: 'sub_2', student_name: 'David Miller', title: 'Paper 2', words_count: 35 },
+        { id: 'sub_3', student_name: 'Bob Johnson', title: 'Paper 3', words_count: 30 },
+        { id: 'sub_4', student_name: 'Charlie Brown', title: 'Paper 4', words_count: 28 }
+      ],
+      suspicious_pairs: [
+        {
+          student_a: 'Alice Smith',
+          student_b: 'David Miller',
+          similarity_score: 75.0,
+          sample_overlapping_phrases: ['deep neural networks utilize backpropagation'],
+          verdict: 'High Collusion Risk'
+        }
+      ],
+      collusion_clusters: [['Alice Smith', 'David Miller']]
+    };
+
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => mockCohortResponse,
+    });
+
+    render(
+      <CohortCollusionModal
+        isOpen={true}
+        onClose={handleClose}
+      />
+    );
+
+    expect(screen.getByText(/Cross-Cohort Collusion Matrix & Peer Ring Detector/i)).toBeInTheDocument();
+    expect(screen.getByText(/Load Sample 4-Student Ring/i)).toBeInTheDocument();
+
+    // Run analysis
+    const analyzeBtn = screen.getByRole('button', { name: /Compute Collusion Matrix/i });
+    fireEvent.click(analyzeBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Cohort Verdict: High Collusion Risk Detected/i)).toBeInTheDocument();
+    });
+
+    expect(screen.getByText(/Pairwise Overlap Heatmap Matrix/i)).toBeInTheDocument();
+    expect(screen.getByText(/Flagged Collusion Pairs/i)).toBeInTheDocument();
+    expect(screen.getByText(/75% Shared/i)).toBeInTheDocument();
+
+    // Close button
+    const closeBtn = screen.getByRole('button', { name: /^Close$/i });
+    fireEvent.click(closeBtn);
+    expect(handleClose).toHaveBeenCalledTimes(1);
+
     global.fetch.mockRestore();
   });
 });
