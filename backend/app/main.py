@@ -51,6 +51,8 @@ from app.services.ai_detector import AIDetectionEngine
 from app.services.citation_filter import AcademicCitationFilter
 from app.services.code_plagiarism import CodePlagiarismEngine
 from app.services.citation_generator import SmartCitationGenerator
+from app.services.adversarial_detector import AdversarialDetector
+from app.services.remediation_engine import RemediationEngine
 from app.services.task_stream import subscribe_task_events, publish_task_event
 from app.services.storage_service import StorageService
 from app.services.stripe_service import StripeService, PLANS
@@ -245,6 +247,11 @@ class CodeCompareRequest(BaseModel):
     code_b: str = Field(..., min_length=5, description="Second source code snippet to compare against")
     filename_a: Optional[str] = Field(default="submission_a.py", description="Filename of first snippet")
     filename_b: Optional[str] = Field(default="submission_b.py", description="Filename of second snippet")
+
+class RemediationRequest(BaseModel):
+    original_text: str = Field(..., min_length=2, description="Original flagged sentence")
+    revised_text: str = Field(..., min_length=2, description="Student rewritten revision")
+    source_text: str = Field(..., min_length=2, description="Original reference source text")
 
 class CreateRepositoryDocumentRequest(BaseModel):
     title: str = Field(..., min_length=2, max_length=255)
@@ -1653,6 +1660,12 @@ async def programmatic_audit_scan(
         )
 
     clean_text = payload.text.strip()
+
+    # Adversarial Evasion & Unicode Homoglyph Scanner
+    adversarial_audit = AdversarialDetector.audit_and_unmask(clean_text)
+    if adversarial_audit["tampering_detected"]:
+        clean_text = adversarial_audit["unmasked_text"]
+
     words = clean_text.split()
     total_words = len(words)
 
@@ -1744,6 +1757,21 @@ async def programmatic_audit_scan(
         db.add(current_user)
         await db.commit()
 
+    cert_id = f"cert_{uuid.uuid4().hex[:12]}"
+    certificate_data = {
+        "certificate_id": cert_id,
+        "document_title": payload.title,
+        "sha256": adversarial_audit["sha256_hash"],
+        "issued_at": datetime.now(timezone.utc).isoformat(),
+        "overall_score": scan_report["overall_plagiarism_percentage"],
+        "originality_score": scan_report["originality_percentage"],
+        "ai_probability": ai_analysis["ai_probability"],
+        "integrity_status": adversarial_audit["integrity_status"],
+        "verification_seal": "Cryptographically Verified by Poach Academic Integrity Protocol",
+        "verification_url": f"https://chalbecopykrega-app.onrender.com/verify/{cert_id}"
+    }
+    CERTIFICATE_REGISTRY[cert_id] = certificate_data
+
     return {
         "status": "success",
         "document_title": payload.title,
@@ -1756,6 +1784,8 @@ async def programmatic_audit_scan(
         "ephemeral_mode": payload.ephemeral_mode,
         "zero_retention_guaranteed": payload.ephemeral_mode,
         "code_analysis": code_analysis,
+        "adversarial_integrity": adversarial_audit,
+        "certificate": certificate_data,
         "ai_detection": {
             "ai_probability": ai_analysis["ai_probability"],
             "human_probability": ai_analysis["human_probability"],
@@ -1770,8 +1800,10 @@ async def programmatic_audit_scan(
 
 
 # ------------------------------------------------------------------------------
-# 1-Click Smart Citations & Source Code Plagiarism Endpoints
+# 1-Click Smart Citations, Code AST, & Remediation Sandbox Endpoints
 # ------------------------------------------------------------------------------
+
+CERTIFICATE_REGISTRY: Dict[str, Dict[str, Any]] = {}
 
 @app.post("/api/citations/generate")
 async def generate_citation(
@@ -1811,6 +1843,47 @@ async def compare_code_files(
         "filename_b": payload.filename_b,
         "comparison": comparison
     }
+
+
+@app.get("/api/certificate/{cert_id}")
+async def get_certificate(cert_id: str, db: AsyncSession = Depends(get_db_session)):
+    """
+    Public Verification Endpoint for Cryptographic Originality Certificates.
+    Allows students, professors, journals, and employers to independently verify
+    the authenticity, tamper-evidence hash, and originality score of any certified paper.
+    """
+    cert = CERTIFICATE_REGISTRY.get(cert_id)
+    if not cert:
+        res = await db.execute(select(ScanHistory))
+        for scan in res.scalars().all():
+            rep = scan.report_json or {}
+            c = rep.get("certificate")
+            if c and c.get("certificate_id") == cert_id:
+                cert = c
+                CERTIFICATE_REGISTRY[cert_id] = cert
+                break
+
+    if not cert:
+        raise HTTPException(status_code=404, detail="Originality Certificate not found or expired.")
+
+    return {
+        "status": "verified",
+        "certificate": cert
+    }
+
+
+@app.post("/api/remediation/evaluate")
+async def evaluate_remediation(payload: RemediationRequest):
+    """
+    Interactive Student Remediation Sandbox API.
+    Evaluates student paraphrasing against original and source texts,
+    calculating live similarity reduction and pedagogical academic writing feedback.
+    """
+    return RemediationEngine.evaluate_revision(
+        original_text=payload.original_text,
+        revised_text=payload.revised_text,
+        source_text=payload.source_text
+    )
 
 
 # ------------------------------------------------------------------------------

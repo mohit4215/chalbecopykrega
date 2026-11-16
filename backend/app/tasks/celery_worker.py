@@ -2,6 +2,7 @@ import os
 import uuid
 import asyncio
 import logging
+from datetime import datetime, timezone
 from typing import Dict, Any, Optional
 from celery import Celery
 from sqlalchemy import select
@@ -19,6 +20,7 @@ from app.services.ai_detector import AIDetectionEngine
 from app.services.citation_filter import AcademicCitationFilter
 from app.services.code_plagiarism import CodePlagiarismEngine
 from app.services.citation_generator import SmartCitationGenerator
+from app.services.adversarial_detector import AdversarialDetector
 
 logger = logging.getLogger("plagiarism.celery")
 
@@ -278,8 +280,21 @@ def process_plagiarism_document(
         )
 
         extraction_result = _ingestion_pipeline.ingest_document(temp_file_path)
-        chunks = extraction_result.chunks
-        chunk_strings = [c.text for c in chunks]
+
+        # Step 1.5: Adversarial Evasion & Unicode Homoglyph Scanner
+        adversarial_audit = AdversarialDetector.audit_and_unmask(extraction_result.cleaned_text)
+        if adversarial_audit["tampering_detected"]:
+            logger.warning(
+                f"Adversarial evasion detected in {filename}: "
+                f"{adversarial_audit['homoglyphs_detected_count']} homoglyphs, "
+                f"{adversarial_audit['zero_width_chars_count']} invisible chars. Unmasking..."
+            )
+            extraction_result.cleaned_text = adversarial_audit["unmasked_text"]
+            chunks = _ingestion_pipeline.chunker.chunk(adversarial_audit["unmasked_text"])
+            chunk_strings = [c.text for c in chunks]
+        else:
+            chunks = extraction_result.chunks
+            chunk_strings = [c.text for c in chunks]
 
         # Step 2: Vector embeddings & similarity search
         report_progress(
@@ -379,6 +394,20 @@ def process_plagiarism_document(
                 "renaming_protection": "Active (Tokens mapped to canonical placeholders v1, v2...)"
             }
 
+        cert_id = f"cert_{uuid.uuid4().hex[:12]}"
+        certificate_data = {
+            "certificate_id": cert_id,
+            "document_title": filename,
+            "sha256": adversarial_audit["sha256_hash"],
+            "issued_at": datetime.now(timezone.utc).isoformat(),
+            "overall_score": scan_report["overall_plagiarism_percentage"],
+            "originality_score": scan_report["originality_percentage"],
+            "ai_probability": ai_analysis["ai_probability"],
+            "integrity_status": adversarial_audit["integrity_status"],
+            "verification_seal": "Cryptographically Verified by Poach Academic Integrity Protocol",
+            "verification_url": f"https://chalbecopykrega-app.onrender.com/verify/{cert_id}"
+        }
+
         final_payload = {
             "scan_id": new_scan_id,
             "document_id": doc_id,
@@ -396,6 +425,8 @@ def process_plagiarism_document(
             "ephemeral_mode": ephemeral_mode,
             "zero_retention_guaranteed": ephemeral_mode,
             "code_analysis": code_analysis,
+            "adversarial_integrity": adversarial_audit,
+            "certificate": certificate_data,
             "summary": {
                 "exact_matches_count": scan_report["summary"]["exact_matches_count"],
                 "paraphrase_matches_count": scan_report["summary"]["paraphrase_matches_count"],
