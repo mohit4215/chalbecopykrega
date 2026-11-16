@@ -1,14 +1,17 @@
-"""Automated Open-Access Academic Data Harvester.
+"""Automated Open-Access Academic Data Harvester (Enterprise Multi-Source Edition).
 
 Enriches Poach's reference plagiarism database with millions of real-world scholarly works
-from global open-access repositories (OpenAlex & arXiv), rivaling commercial corpora.
+from the world's 4 largest open-access academic repositories, rivaling commercial corpora.
 
-Sources:
-  1. OpenAlex API (250M+ scholarly works, abstracts, and metadata)
-  2. arXiv API (2.4M+ open preprints in STEM, CS, AI, Physics, Math)
-  3. Curated High-Yield Offline Scholarly Seed Corpus (for airgapped or test environments)
+Connected Academic Repositories:
+  1. OpenAlex API (250M+ scholarly works, abstracts, and global concepts)
+  2. arXiv API (2.4M+ open-access STEM, CS, AI, Math, and Physics preprints)
+  3. Semantic Scholar (S2ORC) API (200M+ research papers with open-access PDFs & abstracts)
+  4. Crossref Global DOI API (150M+ peer-reviewed publisher works & citations)
+  5. Curated High-Yield Offline Scholarly Seed Corpus (for airgapped or test environments)
 """
 
+import os
 import re
 import urllib.parse
 import xml.etree.ElementTree as ET
@@ -17,7 +20,7 @@ import httpx
 
 
 class AcademicDataHarvester:
-    """Harvests open-access academic literature and preprints for plagiarism indexing."""
+    """Harvests open-access academic literature, DOIs, and preprints for plagiarism indexing."""
 
     CURATED_TOPICS = [
         {"id": "ai_ml", "label": "Artificial Intelligence & ML", "query": "machine learning artificial intelligence"},
@@ -110,6 +113,14 @@ class AcademicDataHarvester:
             return ""
 
     @classmethod
+    def _strip_markup(cls, text: str) -> str:
+        """Strips JATS XML, HTML, and extra whitespace from academic abstracts."""
+        if not text:
+            return ""
+        clean = re.sub(r'<[^>]+>', ' ', text)
+        return " ".join(clean.split())
+
+    @classmethod
     async def harvest_openalex(
         cls,
         topic: str,
@@ -151,21 +162,17 @@ class AcademicDataHarvester:
                         if not abstract_text or len(abstract_text.split()) < 20:
                             continue
 
-                        # Extract authors
                         authorships = work.get("authorships", [])
                         author_names = [a.get("author", {}).get("display_name") for a in authorships if a.get("author")]
                         author_str = ", ".join(filter(None, author_names[:3])) or "OpenAlex Academic Contributor"
 
-                        # Institution / Host venue
                         host_venue = work.get("host_venue", {}) or {}
                         institution = host_venue.get("display_name") or "Open Access Repository"
 
-                        # Primary concept
                         concepts = work.get("concepts", [])
                         category = concepts[0].get("display_name") if concepts else "Academic Research"
 
                         doi = work.get("doi") or work.get("id")
-
                         full_text = f"{title}\n\nAbstract:\n{abstract_text}"
 
                         results.append({
@@ -181,7 +188,6 @@ class AcademicDataHarvester:
                         if len(results) >= limit:
                             break
         except Exception:
-            # Fallback to local high-yield seeds if network unavailable
             pass
 
         return results
@@ -230,7 +236,6 @@ class AcademicDataHarvester:
                         author_str = ", ".join(filter(None, authors[:3])) or "arXiv Researcher"
 
                         arxiv_url = id_el.text if id_el is not None else "https://arxiv.org"
-
                         full_text = f"{title}\n\nAbstract:\n{summary}"
 
                         results.append({
@@ -251,6 +256,155 @@ class AcademicDataHarvester:
         return results
 
     @classmethod
+    async def harvest_semantic_scholar(
+        cls,
+        topic: str,
+        limit: int = 10,
+        timeout: float = 8.0
+    ) -> List[Dict[str, Any]]:
+        """
+        Harvests scientific papers from Semantic Scholar (S2ORC) Academic Graph API (200M+ works).
+        """
+        results: List[Dict[str, Any]] = []
+        clean_topic = topic.strip()
+        encoded_query = urllib.parse.quote(clean_topic)
+
+        url = (
+            f"https://api.semanticscholar.org/graph/v1/paper/search"
+            f"?query={encoded_query}"
+            f"&limit={min(20, max(1, limit))}"
+            f"&fields=title,authors,abstract,venue,year,openAccessPdf"
+        )
+
+        headers = {
+            "User-Agent": "PoachAcademicIntegrity/1.0 (mailto:academic-research@poach.ai)"
+        }
+        api_key = os.getenv("SEMANTIC_SCHOLAR_API_KEY")
+        if api_key:
+            headers["x-api-key"] = api_key.strip()
+
+        try:
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                resp = await client.get(url, headers=headers)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    papers = data.get("data", [])
+
+                    for p in papers:
+                        title = p.get("title") or "Untitled Semantic Scholar Work"
+                        abstract = (p.get("abstract") or "").strip()
+
+                        if not abstract or len(abstract.split()) < 15:
+                            continue
+
+                        authors = [a.get("name") for a in p.get("authors", []) if a.get("name")]
+                        author_str = ", ".join(authors[:3]) or "Semantic Scholar Contributor"
+
+                        venue = p.get("venue") or "Peer-Reviewed Academic Venue"
+                        year = p.get("year") or 2024
+                        institution = f"{venue} ({year})"
+
+                        pdf_info = p.get("openAccessPdf") or {}
+                        pdf_url = pdf_info.get("url") or f"https://www.semanticscholar.org/paper/{p.get('paperId')}"
+
+                        full_text = f"{title}\n\nAbstract:\n{abstract}"
+
+                        results.append({
+                            "title": title[:250],
+                            "author": author_str[:250],
+                            "category": "Semantic Scholar Science Graph",
+                            "institution": institution[:250],
+                            "full_text": full_text,
+                            "source_url": pdf_url,
+                            "harvest_source": "Semantic Scholar (S2ORC)"
+                        })
+
+                        if len(results) >= limit:
+                            break
+        except Exception:
+            pass
+
+        return results
+
+    @classmethod
+    async def harvest_crossref(
+        cls,
+        topic: str,
+        limit: int = 10,
+        timeout: float = 8.0
+    ) -> List[Dict[str, Any]]:
+        """
+        Harvests peer-reviewed works and official DOIs from Crossref REST API (150M+ publications).
+        """
+        results: List[Dict[str, Any]] = []
+        clean_topic = topic.strip()
+        encoded_query = urllib.parse.quote(clean_topic)
+
+        url = (
+            f"https://api.crossref.org/works"
+            f"?query={encoded_query}"
+            f"&rows={min(20, max(1, limit))}"
+            f"&filter=has-abstract:true"
+            f"&select=title,author,abstract,container-title,DOI,URL"
+            f"&mailto=academic-research@poach.ai"
+        )
+
+        headers = {
+            "User-Agent": "PoachAcademicIntegrity/1.0 (mailto:academic-research@poach.ai)"
+        }
+
+        try:
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                resp = await client.get(url, headers=headers)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    items = data.get("message", {}).get("items", [])
+
+                    for item in items:
+                        title_list = item.get("title", [])
+                        title = title_list[0] if title_list else "Untitled Crossref Work"
+
+                        raw_abstract = item.get("abstract", "")
+                        clean_abstract = cls._strip_markup(raw_abstract)
+
+                        if not clean_abstract or len(clean_abstract.split()) < 15:
+                            continue
+
+                        authors = []
+                        for a in item.get("author", []):
+                            given = a.get("given", "")
+                            family = a.get("family", "")
+                            name = f"{given} {family}".strip()
+                            if name:
+                                authors.append(name)
+                        author_str = ", ".join(authors[:3]) or "Crossref Registered Scholar"
+
+                        container = item.get("container-title", [])
+                        venue = container[0] if container else "Scholarly Publication"
+                        doi = item.get("DOI", "")
+                        institution = f"{venue} (DOI: {doi})" if doi else venue
+
+                        doi_url = item.get("URL") or f"https://doi.org/{doi}"
+                        full_text = f"{title}\n\nAbstract:\n{clean_abstract}"
+
+                        results.append({
+                            "title": title[:250],
+                            "author": author_str[:250],
+                            "category": "Crossref Peer-Reviewed Journal",
+                            "institution": institution[:250],
+                            "full_text": full_text,
+                            "source_url": doi_url,
+                            "harvest_source": "Crossref Global DOI Registry"
+                        })
+
+                        if len(results) >= limit:
+                            break
+        except Exception:
+            pass
+
+        return results
+
+    @classmethod
     async def harvest_papers(
         cls,
         topic: str,
@@ -258,22 +412,47 @@ class AcademicDataHarvester:
         source: str = "all"
     ) -> List[Dict[str, Any]]:
         """
-        Aggregates open-access literature across OpenAlex, arXiv, and curated backups.
-        Guarantees high-quality academic records are returned even during partial network outages.
+        Aggregates open-access literature across OpenAlex, arXiv, Semantic Scholar, Crossref,
+        and high-yield fallback preprints. Guarantees authentic records are returned.
         """
         papers: List[Dict[str, Any]] = []
+        source_lower = (source or "all").lower()
 
-        if source in ("openalex", "all"):
-            oa_limit = limit if source == "openalex" else max(2, limit // 2)
-            oa_papers = await cls.harvest_openalex(topic=topic, limit=oa_limit)
-            papers.extend(oa_papers)
+        # Dedicated single-source queries
+        if source_lower == "openalex":
+            papers.extend(await cls.harvest_openalex(topic=topic, limit=limit))
+        elif source_lower == "arxiv":
+            papers.extend(await cls.harvest_arxiv(topic=topic, limit=limit))
+        elif source_lower in ("semanticscholar", "semantic_scholar"):
+            papers.extend(await cls.harvest_semantic_scholar(topic=topic, limit=limit))
+        elif source_lower == "crossref":
+            papers.extend(await cls.harvest_crossref(topic=topic, limit=limit))
+        else:
+            # "all" - Multi-source federation across all 4 major providers
+            per_source = max(1, limit // 4)
+            oa = await cls.harvest_openalex(topic=topic, limit=per_source)
+            papers.extend(oa)
 
-        if source in ("arxiv", "all") and len(papers) < limit:
-            remaining = limit - len(papers)
-            arxiv_papers = await cls.harvest_arxiv(topic=topic, limit=remaining)
-            papers.extend(arxiv_papers)
+            ar = await cls.harvest_arxiv(topic=topic, limit=per_source)
+            papers.extend(ar)
 
-        # If external APIs are blocked or offline, use curated scholarly seeds matching topic
+            ss = await cls.harvest_semantic_scholar(topic=topic, limit=per_source)
+            papers.extend(ss)
+
+            cr = await cls.harvest_crossref(topic=topic, limit=per_source)
+            papers.extend(cr)
+
+            # If some providers had fewer results, top up from OpenAlex/arXiv
+            if len(papers) < limit:
+                deficit = limit - len(papers)
+                extra = await cls.harvest_openalex(topic=topic, limit=deficit + 2)
+                for p in extra:
+                    if not any(existing["title"] == p["title"] for existing in papers):
+                        papers.append(p)
+                    if len(papers) >= limit:
+                        break
+
+        # Fallback to curated scholarly seeds if external APIs are unreachable
         if not papers:
             query_lower = topic.lower()
             matching_fallbacks = [

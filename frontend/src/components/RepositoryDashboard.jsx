@@ -533,7 +533,7 @@ export default function RepositoryDashboard() {
                     Harvest Open-Access Research Corpus
                   </h3>
                   <p className="text-xs text-slate-500 dark:text-slate-400">
-                    Pull authentic research from OpenAlex (250M+ works) and arXiv into your comparison index.
+                    Pull authentic research across OpenAlex, arXiv, Semantic Scholar, and Crossref into your comparison index.
                   </p>
                 </div>
               </div>
@@ -596,9 +596,11 @@ export default function RepositoryDashboard() {
                     onChange={(e) => setHarvestSource(e.target.value)}
                     className="w-full px-3.5 py-2 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-slate-700 dark:text-slate-300 font-medium"
                   >
-                    <option value="all">All Sources (OpenAlex + arXiv)</option>
-                    <option value="openalex">OpenAlex (Global Works)</option>
-                    <option value="arxiv">arXiv (STEM Preprints)</option>
+                    <option value="all">All Sources (OpenAlex, arXiv, Semantic Scholar, Crossref)</option>
+                    <option value="openalex">OpenAlex (Global Works - 250M+)</option>
+                    <option value="arxiv">arXiv (STEM Preprints - 2.4M+)</option>
+                    <option value="semanticscholar">Semantic Scholar (AI & Science Graph - 200M+)</option>
+                    <option value="crossref">Crossref (Peer-Reviewed DOIs - 150M+)</option>
                   </select>
                 </div>
 

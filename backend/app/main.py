@@ -276,7 +276,7 @@ class CreateRepositoryDocumentRequest(BaseModel):
 class HarvestRequest(BaseModel):
     topic: str = Field(default="Artificial Intelligence", min_length=2, max_length=150, description="Academic subject or keyword query")
     limit: int = Field(default=5, ge=1, le=25, description="Number of papers to harvest (1 to 25)")
-    source: str = Field(default="all", description="Source repository: 'openalex', 'arxiv', or 'all'")
+    source: str = Field(default="all", description="Source repository: 'openalex', 'arxiv', 'semanticscholar', 'crossref', or 'all'")
 
 class RepositoryDocumentResponse(BaseModel):
     id: str
@@ -1970,8 +1970,9 @@ async def harvest_academic_corpus(
 ):
     """
     Automated Open-Access Academic Data Harvester API.
-    Fetches real-world scholarly research and preprints from OpenAlex and arXiv,
-    generating sliding-window vector chunks and indexing them into the comparison corpus.
+    Fetches real-world scholarly research and preprints across OpenAlex, arXiv,
+    Semantic Scholar, and Crossref, generating sliding-window vector chunks
+    and indexing them into the comparison corpus.
     """
     harvested = await AcademicDataHarvester.harvest_papers(
         topic=payload.topic,
