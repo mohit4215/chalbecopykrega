@@ -54,6 +54,7 @@ from app.services.citation_generator import SmartCitationGenerator
 from app.services.adversarial_detector import AdversarialDetector
 from app.services.remediation_engine import RemediationEngine
 from app.services.collusion_detector import CohortCollusionDetector
+from app.services.data_harvester import AcademicDataHarvester
 from app.services.task_stream import subscribe_task_events, publish_task_event
 from app.services.storage_service import StorageService
 from app.services.stripe_service import StripeService, PLANS
@@ -270,6 +271,11 @@ class CreateRepositoryDocumentRequest(BaseModel):
     category: str = Field(default="Academic Paper", max_length=100)
     institution: Optional[str] = Field(default="Institutional Library", max_length=255)
     content: str = Field(..., min_length=10, description="Full plain text content of the reference document")
+
+class HarvestRequest(BaseModel):
+    topic: str = Field(default="Artificial Intelligence", min_length=2, max_length=150, description="Academic subject or keyword query")
+    limit: int = Field(default=5, ge=1, le=25, description="Number of papers to harvest (1 to 25)")
+    source: str = Field(default="all", description="Source repository: 'openalex', 'arxiv', or 'all'")
 
 class RepositoryDocumentResponse(BaseModel):
     id: str
@@ -1941,6 +1947,88 @@ async def get_repository_stats(db: AsyncSession = Depends(get_db_session)):
         "total_words": total_words,
         "active_in_memory_index": active_in_mem,
         "categories": categories
+    }
+
+
+@app.get("/api/repository/harvest/topics")
+async def get_harvest_topics():
+    """Returns curated academic disciplines for one-click open-access corpus harvesting."""
+    return {
+        "topics": AcademicDataHarvester.CURATED_TOPICS
+    }
+
+
+@app.post("/api/repository/harvest")
+async def harvest_academic_corpus(
+    payload: HarvestRequest,
+    current_user: User = Depends(require_authenticated_principal),
+    db: AsyncSession = Depends(get_db_session)
+):
+    """
+    Automated Open-Access Academic Data Harvester API.
+    Fetches real-world scholarly research and preprints from OpenAlex and arXiv,
+    generating sliding-window vector chunks and indexing them into the comparison corpus.
+    """
+    harvested = await AcademicDataHarvester.harvest_papers(
+        topic=payload.topic,
+        limit=payload.limit,
+        source=payload.source
+    )
+
+    ingested_papers = []
+    total_new_chunks = 0
+    total_new_words = 0
+
+    for paper in harvested:
+        content = paper["full_text"].strip()
+        words = content.split()
+        chunks = chunk_text_sliding_window(content, chunk_size=50, overlap=20)
+        doc_id = f"doc_{uuid.uuid4().hex[:12]}"
+
+        new_doc = RepositoryDocument(
+            id=doc_id,
+            title=paper["title"][:250],
+            author=paper["author"][:250],
+            category=paper["category"][:95],
+            institution=paper["institution"][:250],
+            full_text=content,
+            word_count=len(words),
+            chunk_count=len(chunks),
+            is_active=True
+        )
+        db.add(new_doc)
+        await db.commit()
+        await db.refresh(new_doc)
+
+        vector_db.index_submission(
+            document_id=new_doc.id,
+            student_name=new_doc.author,
+            title=new_doc.title,
+            chunks=chunks,
+            category=new_doc.category
+        )
+
+        total_new_chunks += len(chunks)
+        total_new_words += len(words)
+        ingested_papers.append({
+            "id": new_doc.id,
+            "title": new_doc.title,
+            "author": new_doc.author,
+            "category": new_doc.category,
+            "institution": new_doc.institution,
+            "words_added": len(words),
+            "chunks_indexed": len(chunks),
+            "harvest_source": paper.get("harvest_source", "Open Access Repository")
+        })
+
+    return {
+        "status": "success",
+        "topic_harvested": payload.topic,
+        "source_used": payload.source,
+        "papers_ingested_count": len(ingested_papers),
+        "total_new_chunks": total_new_chunks,
+        "total_new_words": total_new_words,
+        "ingested_papers": ingested_papers
     }
 
 
