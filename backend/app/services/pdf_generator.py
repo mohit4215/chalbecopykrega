@@ -97,6 +97,9 @@ class PDFReportGenerator:
         ai_data = report_data.get("ai_detection") or {}
         ai_probability = float(ai_data.get("ai_probability", 0.0))
         ai_verdict = ai_data.get("verdict", "Human-Authored")
+        esl_active = bool(report_data.get("esl_mode") or ai_data.get("esl_shield_applied"))
+        ephemeral_active = bool(report_data.get("ephemeral_mode") or report_data.get("zero_retention_guaranteed"))
+        code_analysis = report_data.get("code_analysis")
 
         # Color theme based on score severity
         if overall_score < 20:
@@ -112,7 +115,7 @@ class PDFReportGenerator:
             score_bg = "#fff1f2"
             severity_label = "HIGH PLAGIARISM DETECTED"
 
-        # Generate styled source table rows
+        # Generate styled source table rows with 1-Click Smart Citations
         source_rows = []
         for idx, m in enumerate(matches, 1):
             pct = int((m.get("similarity_score") or 0) * 100)
@@ -122,6 +125,10 @@ class PDFReportGenerator:
             url = m.get("source_url")
             source_id_str = str(m.get("source_id") or "Internal DB")
             link_html = f'<a href="{url}" style="color: #4f46e5; text-decoration: none;">{html.escape(str(url)[:55])}...</a>' if url else f'<span style="color: #64748b;">ID: {html.escape(source_id_str)}</span>'
+            
+            cites = m.get("smart_citations") or {}
+            apa_cite = cites.get("apa", {}).get("in_text")
+            cite_snippet = f'<br/><span style="color: #4338ca; font-size: 9px; font-style: italic;">Citation: {html.escape(apa_cite)}</span>' if apa_cite else ''
 
             source_rows.append(f"""
             <tr style="border-bottom: 1px solid #e2e8f0; font-size: 11px;">
@@ -129,6 +136,7 @@ class PDFReportGenerator:
                 <td style="padding: 8px;">
                     <strong>{title}</strong><br/>
                     {link_html}
+                    {cite_snippet}
                 </td>
                 <td style="padding: 8px; width: 100px;">
                     <span style="background-color: #f1f5f9; padding: 2px 6px; border-radius: 4px; font-size: 9px; font-weight: bold;">{m_type}</span>
@@ -138,6 +146,16 @@ class PDFReportGenerator:
             """)
 
         sources_table_content = "".join(source_rows) if source_rows else '<tr><td colspan="4" style="padding: 12px; text-align: center; color: #10b981;">No matching sources found. Document is 100% original.</td></tr>'
+
+        # Differentiator Badges
+        feature_badges = []
+        if esl_active:
+            feature_badges.append('<span style="background-color: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; padding: 2px 6px; border-radius: 4px; font-size: 9px; font-weight: bold; margin-right: 6px;">🛡️ ESL Student Bias Shield Active</span>')
+        if ephemeral_active:
+            feature_badges.append('<span style="background-color: #faf5ff; color: #6b21a8; border: 1px solid #d8b4fe; padding: 2px 6px; border-radius: 4px; font-size: 9px; font-weight: bold; margin-right: 6px;">🔒 Zero-Knowledge Ephemeral Audit</span>')
+        if code_analysis:
+            feature_badges.append(f'<span style="background-color: #ecfeff; color: #0e7490; border: 1px solid #a5f3fc; padding: 2px 6px; border-radius: 4px; font-size: 9px; font-weight: bold; margin-right: 6px;">💻 Code AST Protected ({code_analysis.get("unique_identifiers_count", 0)} IDs)</span>')
+        badges_html = f'<div style="margin-top: 6px;">{"".join(feature_badges)}</div>' if feature_badges else ''
 
         # Highlighted text body
         highlighted_body = cls._slice_highlighted_html(full_text, matches)
@@ -327,6 +345,7 @@ class PDFReportGenerator:
                                 Originality Coefficient: <strong>{originality_score}% Original Content</strong><br/>
                                 Total Matched Sources: <strong>{len(matches)} primary clusters identified</strong><br/>
                                 AI Writing Detection: <strong>{ai_probability}% Probability ({ai_verdict})</strong>
+                                {badges_html}
                             </div>
                         </td>
                     </tr>

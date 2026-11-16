@@ -6,7 +6,10 @@ import {
   Sparkles,
   CheckCircle2,
   AlertTriangle,
-  AlertCircle
+  AlertCircle,
+  Shield,
+  EyeOff,
+  Code2
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { cn } from '../lib/utils';
@@ -126,6 +129,27 @@ export default function ReportStickyHeader({
                 )}>
                   <Sparkles className="w-3 h-3" />
                   AI Writing: {report.ai_detection.ai_probability}% ({report.ai_detection.verdict})
+                </span>
+              )}
+
+              {report.esl_mode && (
+                <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800 flex items-center gap-1">
+                  <Shield className="w-3 h-3" />
+                  ESL Shield
+                </span>
+              )}
+
+              {report.ephemeral_mode && (
+                <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-800 flex items-center gap-1">
+                  <EyeOff className="w-3 h-3" />
+                  Ephemeral
+                </span>
+              )}
+
+              {report.code_analysis && (
+                <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border bg-teal-50 text-teal-700 border-teal-200 dark:bg-teal-950/40 dark:text-teal-300 dark:border-teal-800 flex items-center gap-1">
+                  <Code2 className="w-3 h-3" />
+                  AST Protected
                 </span>
               )}
             </div>
