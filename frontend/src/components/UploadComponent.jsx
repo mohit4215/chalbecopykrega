@@ -8,7 +8,6 @@ import {
   FileText, 
   CheckCircle2, 
   AlertCircle, 
-  Sparkles, 
   X, 
   FileCheck2, 
   Cpu, 
@@ -318,54 +317,54 @@ export default function UploadComponent({ onScanComplete, isLoading, setIsLoadin
   };
 
   return (
-    <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-xl border border-slate-200/80 dark:border-slate-800 p-6 sm:p-8 max-w-2xl mx-auto transition-all">
+    <div className="bg-white dark:bg-[#0d121f] rounded-xl shadow-xs border border-slate-200/90 dark:border-slate-800 p-6 sm:p-7 max-w-2xl mx-auto transition-colors">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-6 border-b border-slate-100 dark:border-slate-800 gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between pb-5 border-b border-slate-100 dark:border-slate-800 gap-4">
         <div>
-          <span className="text-xs font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
-            Distributed Vector & Web Pipeline
+          <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 font-mono">
+            Document Ingestion & Analysis
           </span>
-          <h2 className="text-2xl font-black text-slate-900 dark:text-slate-100 mt-0.5">
-            Originality Verification
+          <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100 mt-1 tracking-tight">
+            Originality Audit
           </h2>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-            Accepts PDF, Word (.docx), plain text (.txt), and Source Code (.py, .js, .cpp, .java, .cs) up to 10 MB.
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-md leading-relaxed">
+            Upload student submissions, research manuscripts, or source code for multi-repository cross-comparison and citation auditing.
           </p>
         </div>
 
         {!isLoading && (
-          <div className="flex items-center gap-2 self-start sm:self-auto">
+          <div className="flex items-center gap-2 shrink-0">
             <Button
               size="sm"
               variant="outline"
               onClick={handleUseSampleDoc}
-              className="border-indigo-200 text-indigo-700 dark:border-indigo-800 dark:text-indigo-300 bg-indigo-50/50 dark:bg-indigo-950/40 text-xs"
+              className="text-xs font-medium"
             >
-              <Sparkles className="w-3.5 h-3.5 mr-1 text-indigo-600" />
+              <FileText className="w-3.5 h-3.5 mr-1.5 text-slate-500" />
               <span>Load Demo Paper</span>
             </Button>
             <Button
               size="sm"
               variant="outline"
               onClick={handleUseSampleCode}
-              className="border-slate-300 text-slate-700 dark:border-slate-700 dark:text-slate-300 bg-slate-50/50 dark:bg-slate-800/40 text-xs"
+              className="text-xs font-medium"
             >
-              <Code2 className="w-3.5 h-3.5 mr-1 text-emerald-600" />
-              <span>Python Code</span>
+              <Code2 className="w-3.5 h-3.5 mr-1.5 text-slate-500" />
+              <span>Sample Code</span>
             </Button>
           </div>
         )}
       </div>
 
       {!token && !isLoading && (
-        <div className="mt-4 p-3.5 bg-gradient-to-r from-indigo-50/90 to-purple-50/90 dark:from-indigo-950/40 dark:to-purple-950/40 border border-indigo-200/80 dark:border-indigo-800/60 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-          <div className="flex items-center gap-2 text-indigo-900 dark:text-indigo-200">
-            <Sparkles className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
-            <span>Ready to test? Drop a paper or scan with <strong>25 Free Pro Credits</strong>.</span>
+        <div className="mt-4 p-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/80 rounded-lg flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+          <div className="flex items-center gap-2 text-slate-700 dark:text-slate-300">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0"></span>
+            <span>Test scan session includes <strong>25 Free Credits</strong> with live reporting.</span>
           </div>
           <div className="flex items-center gap-2 shrink-0">
             <Button
-              size="sm"
+              size="xs"
               variant="outline"
               onClick={async () => {
                 try {
@@ -374,15 +373,15 @@ export default function UploadComponent({ onScanComplete, isLoading, setIsLoadin
                   if (onNeedLogin) onNeedLogin();
                 }
               }}
-              className="h-7 text-xs font-bold border-indigo-300 text-indigo-700 dark:text-indigo-300 bg-white/60 dark:bg-slate-900/60"
+              className="font-medium"
             >
-              1-Click Demo Login
+              Demo Access
             </Button>
             {onNeedLogin && (
               <Button
-                size="sm"
+                size="xs"
                 onClick={onNeedLogin}
-                className="h-7 text-xs font-bold shadow-sm"
+                className="font-medium"
               >
                 Sign In
               </Button>
@@ -392,7 +391,7 @@ export default function UploadComponent({ onScanComplete, isLoading, setIsLoadin
       )}
 
       {errorMessage && (
-        <div className="mt-5 p-4 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 rounded-2xl text-xs text-rose-700 dark:text-rose-300 flex items-start gap-2.5">
+        <div className="mt-4 p-3.5 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 rounded-lg text-xs text-rose-700 dark:text-rose-300 flex items-start gap-2.5">
           <AlertCircle className="w-4 h-4 shrink-0 text-rose-600 mt-0.5" />
           <span>{errorMessage}</span>
         </div>
@@ -404,81 +403,67 @@ export default function UploadComponent({ onScanComplete, isLoading, setIsLoadin
           /* Success Reveal State */
           <motion.div
             key="success-reveal"
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 1.05 }}
-            transition={{ duration: 0.4 }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
             className="py-10 text-center space-y-4"
           >
-            <motion.div
-              initial={{ scale: 0 }}
-              animate={{ scale: 1 }}
-              transition={{ type: 'spring', damping: 15, stiffness: 200, delay: 0.1 }}
-              className="w-20 h-20 bg-emerald-100 dark:bg-emerald-950/80 text-emerald-600 dark:text-emerald-400 rounded-3xl flex items-center justify-center mx-auto shadow-xl shadow-emerald-500/20"
-            >
-              <CheckCircle2 className="w-10 h-10" />
-            </motion.div>
+            <div className="w-14 h-14 bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 rounded-xl flex items-center justify-center mx-auto border border-emerald-200 dark:border-emerald-800">
+              <CheckCircle2 className="w-7 h-7" />
+            </div>
 
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.2 }}
-            >
-              <h3 className="text-xl font-black text-slate-900 dark:text-slate-100">Audit Completed!</h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                Originality index computed: <strong className="text-indigo-600 dark:text-indigo-400 font-black">{Math.round(scanResult.originality_score ?? 100)}% Original</strong>
+            <div>
+              <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100">Audit Completed</h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 tabular-nums">
+                Originality rating: <strong className="text-slate-900 dark:text-slate-100 font-bold">{Math.round(scanResult.originality_score ?? 100)}% Original</strong>
               </p>
-            </motion.div>
+            </div>
 
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.35 }}
-              className="inline-flex items-center gap-2 text-xs font-bold text-slate-400"
-            >
-              <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-500" />
-              <span>Opening interactive report viewer...</span>
-            </motion.div>
+            <div className="inline-flex items-center gap-2 text-xs text-slate-400 font-medium">
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              <span>Loading detailed report viewer...</span>
+            </div>
           </motion.div>
         ) : isLoading ? (
           /* Multi-Step Animated Progress State */
           <motion.div
             key="loading-state"
-            initial={{ opacity: 0, y: 15 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -15 }}
-            transition={{ duration: 0.3 }}
-            className="py-8 space-y-6"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="py-6 space-y-5"
           >
             {/* Header info */}
-            <div className="text-center space-y-2">
-              <div className="w-16 h-16 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 rounded-3xl flex items-center justify-center mx-auto shadow-inner">
-                <Loader2 className="w-8 h-8 animate-spin" />
+            <div className="text-center space-y-1.5">
+              <div className="w-10 h-10 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-lg flex items-center justify-center mx-auto">
+                <Loader2 className="w-5 h-5 animate-spin" />
               </div>
-              <h3 className="text-lg font-black text-slate-900 dark:text-slate-100 truncate max-w-sm mx-auto">
+              <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100 truncate max-w-sm mx-auto">
                 {file?.name || 'Processing Document'}
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto">{statusMessage}</p>
             </div>
 
-            {/* Glowing Multi-Stage Progress Bar */}
+            {/* Clean Progress Bar */}
             <div className="space-y-1.5">
-              <div className="flex justify-between text-xs font-bold">
-                <span className="text-slate-500 dark:text-slate-400">Pipeline Execution</span>
-                <span className="text-indigo-600 dark:text-indigo-400">{taskProgress}%</span>
+              <div className="flex justify-between text-xs">
+                <span className="text-slate-500 font-medium">Pipeline Execution</span>
+                <span className="font-mono font-medium text-slate-700 dark:text-slate-300 tabular-nums">{taskProgress}%</span>
               </div>
-              <div className="w-full h-3 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden p-0.5">
+              <div className="w-full h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
                 <motion.div
-                  className="h-full bg-gradient-to-r from-indigo-500 via-purple-500 to-indigo-600 rounded-full shadow-sm"
+                  className="h-full bg-slate-900 dark:bg-slate-100 rounded-full"
                   initial={{ width: '5%' }}
                   animate={{ width: `${taskProgress}%` }}
-                  transition={{ ease: 'easeOut', duration: 0.5 }}
+                  transition={{ ease: 'easeOut', duration: 0.4 }}
                 />
               </div>
             </div>
 
-            {/* Multi-Step Progress Indicator Cards */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
+            {/* Pipeline Stage Indicators */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2">
               {STAGES.map((s, idx) => {
                 const StageIcon = s.icon;
                 const isPast = taskProgress >= s.defaultPct;
@@ -488,211 +473,201 @@ export default function UploadComponent({ onScanComplete, isLoading, setIsLoadin
                   <div
                     key={idx}
                     className={cn(
-                      'p-3 rounded-2xl border text-center transition-all',
+                      'p-2.5 rounded-lg border text-center transition-colors',
                       isPast
-                        ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300'
+                        ? 'bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-900/60 text-emerald-800 dark:text-emerald-300'
                         : isCurrent
-                        ? 'bg-indigo-50 dark:bg-indigo-950/60 border-indigo-400 text-indigo-900 dark:text-indigo-200 shadow-sm ring-1 ring-indigo-400 animate-pulse'
-                        : 'bg-slate-50/50 dark:bg-slate-800/40 border-slate-200 dark:border-slate-800 text-slate-400'
+                        ? 'bg-slate-100 dark:bg-slate-800 border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100'
+                        : 'bg-transparent border-slate-200/60 dark:border-slate-800/60 text-slate-400'
                     )}
                   >
-                    <StageIcon className="w-5 h-5 mx-auto mb-1.5 shrink-0" />
-                    <p className="text-[11px] font-bold leading-tight">{s.label}</p>
+                    <StageIcon className="w-4 h-4 mx-auto mb-1 shrink-0" />
+                    <p className="text-[11px] font-medium leading-tight">{s.label}</p>
                   </div>
                 );
               })}
             </div>
 
             {/* Streaming Status Indicator */}
-            <div className="flex items-center justify-between text-xs pt-3 border-t border-slate-100 dark:border-slate-800 text-slate-400">
-              <span className="flex items-center gap-1.5">
+            <div className="flex items-center justify-between text-xs pt-2 border-t border-slate-100 dark:border-slate-800 text-slate-400">
+              <span className="flex items-center gap-1.5 text-[11px]">
                 <Clock className="w-3.5 h-3.5" />
                 <span>Estimated duration: 5-15s</span>
               </span>
               {isWsActive ? (
-                <span className="inline-flex items-center gap-1.5 text-[11px] text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/50 px-3 py-1 rounded-full border border-emerald-200 dark:border-emerald-800 font-semibold animate-pulse">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-                  <span>Live WebSocket Feed</span>
+                <span className="inline-flex items-center gap-1.5 text-[11px] text-emerald-700 dark:text-emerald-400 font-medium">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                  <span>WebSocket Active</span>
                 </span>
               ) : (
-                <span className="inline-flex items-center gap-1.5 text-[11px] text-slate-500 bg-slate-50 dark:bg-slate-800 px-3 py-1 rounded-full border border-slate-200 dark:border-slate-700">
-                  <span className="w-2 h-2 rounded-full bg-amber-400"></span>
-                  <span>Direct Pipeline</span>
+                <span className="inline-flex items-center gap-1.5 text-[11px] text-slate-500">
+                  <span className="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
+                  <span>Direct Stream</span>
                 </span>
               )}
             </div>
           </motion.div>
         ) : (
-          /* Normal Upload Form with Framer Motion Drag-and-Drop Zone */
+          /* Normal Upload Form with Clean Drag-and-Drop Zone */
           <motion.div
             key="upload-form"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="mt-6 space-y-6"
+            className="mt-5 space-y-5"
           >
-            {/* Framer Motion Drag-and-Drop Zone */}
+            {/* Clean Drag-and-Drop Zone */}
             <div id="tour-upload-box">
-              <motion.div
+              <div
                 {...getRootProps()}
-                whileHover={{ scale: 1.01 }}
-                animate={
-                  isDragActive
-                    ? {
-                        scale: 1.02,
-                        borderColor: '#6366f1',
-                        backgroundColor: 'rgba(238, 242, 255, 0.6)',
-                        boxShadow: '0 0 25px rgba(99, 102, 241, 0.25)',
-                      }
-                    : {
-                        scale: 1,
-                        borderColor: file ? '#86efac' : '#cbd5e1',
-                        backgroundColor: file ? 'rgba(240, 253, 244, 0.4)' : 'rgba(248, 250, 252, 0.6)',
-                      }
-                }
-                transition={{ duration: 0.2 }}
                 className={cn(
-                  'border-2 border-dashed rounded-3xl p-8 sm:p-10 text-center transition-colors cursor-pointer relative select-none',
-                  'dark:bg-slate-900/60 dark:border-slate-700'
+                  'border border-dashed rounded-xl p-8 sm:p-10 text-center transition-colors cursor-pointer relative select-none',
+                  isDragActive
+                    ? 'border-slate-900 bg-slate-100/60 dark:border-slate-300 dark:bg-slate-800/50'
+                    : file
+                    ? 'border-emerald-300 bg-emerald-50/20 dark:border-emerald-800 dark:bg-emerald-950/10'
+                    : 'border-slate-300 bg-slate-50/40 hover:bg-slate-50/80 dark:border-slate-700 dark:bg-slate-900/30 dark:hover:bg-slate-900/60'
                 )}
               >
                 <input {...getInputProps()} />
 
                 {file ? (
-                  <div className="flex items-center justify-between bg-white dark:bg-slate-800 p-4 rounded-2xl border border-emerald-200 dark:border-emerald-800 shadow-sm max-w-md mx-auto">
+                  <div className="flex items-center justify-between bg-white dark:bg-slate-800 p-3.5 rounded-lg border border-slate-200 dark:border-slate-700 max-w-md mx-auto">
                     <div className="flex items-center gap-3 text-left truncate">
-                      <div className="p-2.5 bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 rounded-xl shrink-0">
-                        <FileCheck2 className="w-6 h-6" />
+                      <div className="p-2 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-md shrink-0">
+                        <FileCheck2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
                       </div>
                       <div className="truncate">
-                        <p className="text-sm font-bold text-slate-900 dark:text-slate-100 truncate">{file.name}</p>
-                        <p className="text-xs text-slate-400 mt-0.5">{(file.size / 1024).toFixed(1)} KB</p>
+                        <p className="text-xs font-semibold text-slate-900 dark:text-slate-100 truncate">{file.name}</p>
+                        <p className="text-[11px] text-slate-400 font-mono mt-0.5 tabular-nums">{(file.size / 1024).toFixed(1)} KB</p>
                       </div>
                     </div>
                     <button
                       type="button"
                       onClick={handleRemoveFile}
-                      className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700 transition ml-2"
+                      className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded hover:bg-slate-100 dark:hover:bg-slate-700 transition ml-2"
                       title="Remove file"
                     >
                       <X className="w-4 h-4" />
                     </button>
                   </div>
                 ) : (
-                  <div className="flex flex-col items-center justify-center py-4">
-                    <motion.div
-                      animate={isDragActive ? { scale: 1.25, rotate: -6 } : { scale: 1, rotate: 0 }}
-                      transition={{ type: 'spring', stiffness: 300, damping: 15 }}
-                      className="w-16 h-16 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 rounded-2xl flex items-center justify-center mb-3 shadow-inner"
-                    >
-                      <Upload className="w-8 h-8" />
-                    </motion.div>
-                    <p className="text-sm font-extrabold text-slate-800 dark:text-slate-200">
-                      {isDragActive ? 'Release to upload document...' : 'Drag & drop your document here, or browse files'}
+                  <div className="flex flex-col items-center justify-center py-2">
+                    <div className="w-12 h-12 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 rounded-lg flex items-center justify-center mb-3 shadow-2xs">
+                      <Upload className="w-5 h-5" />
+                    </div>
+                    <p className="text-xs font-semibold text-slate-800 dark:text-slate-200">
+                      {isDragActive ? 'Release to upload document' : 'Drag & drop your document here, or browse files'}
                     </p>
-                    <p className="text-xs text-slate-400 mt-1 max-w-sm">
-                      Supports PDF, Word (.docx), plain text, and Source Code (.py, .js, .cpp, .java) up to 10 MB.
+                    <p className="text-[11px] text-slate-400 mt-1 max-w-sm">
+                      PDF, DOCX, TXT, and source code files up to 10 MB
                     </p>
+                    <div className="flex items-center gap-1.5 mt-3 text-[10px] font-mono text-slate-400">
+                      <span className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">PDF</span>
+                      <span className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">DOCX</span>
+                      <span className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">TXT</span>
+                      <span className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">CODE</span>
+                    </div>
                   </div>
                 )}
-              </motion.div>
+              </div>
             </div>
 
-            {/* Options & Action Button */}
-            <div className="space-y-4 pt-1">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3.5 rounded-2xl bg-slate-50/80 dark:bg-slate-800/40 border border-slate-200/70 dark:border-slate-800">
+            {/* Audit Configuration Options */}
+            <div className="space-y-3.5 pt-1">
+              <div className="divide-y divide-slate-100 dark:divide-slate-800 border border-slate-200/90 dark:border-slate-800 rounded-lg bg-white dark:bg-[#0d121f]">
                 {/* 1. Web search */}
-                <label className="flex items-start gap-2.5 cursor-pointer text-xs font-semibold text-slate-700 dark:text-slate-300 select-none">
+                <label className="flex items-start gap-3 p-3 cursor-pointer text-xs select-none">
                   <input
                     type="checkbox"
                     checked={enableWeb}
                     onChange={(e) => setEnableWeb(e.target.checked)}
-                    className="w-4 h-4 mt-0.5 text-indigo-600 rounded focus:ring-indigo-500 border-slate-300"
+                    className="w-4 h-4 mt-0.5 accent-slate-900 rounded border-slate-300"
                   />
-                  <div>
-                    <span className="block font-bold">Live Internet Search</span>
-                    <span className="text-[11px] text-slate-400 font-normal">Cross-reference live Google & Bing indices</span>
+                  <div className="flex-1">
+                    <span className="block font-medium text-slate-800 dark:text-slate-200">Live Web & Scholar Cross-Referencing</span>
+                    <span className="text-[11px] text-slate-400 font-normal">Cross-references open web pages and indexed scholarly databases</span>
                   </div>
                 </label>
 
                 {/* 2. ESL Student Bias Shield */}
-                <label className="flex items-start gap-2.5 cursor-pointer text-xs font-semibold text-slate-700 dark:text-slate-300 select-none">
+                <label className="flex items-start gap-3 p-3 cursor-pointer text-xs select-none">
                   <input
                     type="checkbox"
                     checked={eslMode}
                     onChange={(e) => setEslMode(e.target.checked)}
-                    className="w-4 h-4 mt-0.5 text-emerald-600 rounded focus:ring-emerald-500 border-slate-300"
+                    className="w-4 h-4 mt-0.5 accent-slate-900 rounded border-slate-300"
                   />
-                  <div>
-                    <span className="block font-bold text-emerald-700 dark:text-emerald-400 flex items-center gap-1">
-                      <Shield className="w-3 h-3" />
+                  <div className="flex-1">
+                    <span className="block font-medium text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                      <Shield className="w-3.5 h-3.5 text-slate-500" />
                       ESL Student Bias Shield
                     </span>
-                    <span className="text-[11px] text-slate-400 font-normal">Eliminates AI false positives on non-native writers</span>
+                    <span className="text-[11px] text-slate-400 font-normal">Suppresses false-positive flags on non-native English writing patterns</span>
                   </div>
                 </label>
 
                 {/* 3. Auto-Index to Comparison Repository */}
-                <label className={`flex items-start gap-2.5 text-xs font-semibold select-none sm:col-span-2 pt-1 border-t border-slate-200/60 dark:border-slate-800 ${
-                  ephemeralMode ? 'opacity-50 cursor-not-allowed text-slate-400' : 'cursor-pointer text-slate-700 dark:text-slate-300'
+                <label className={`flex items-start gap-3 p-3 text-xs select-none ${
+                  ephemeralMode ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'
                 }`}>
                   <input
                     type="checkbox"
                     checked={!ephemeralMode && autoIndex}
                     disabled={ephemeralMode}
                     onChange={(e) => setAutoIndex(e.target.checked)}
-                    className="w-4 h-4 mt-0.5 text-indigo-600 rounded focus:ring-indigo-500 border-slate-300"
+                    className="w-4 h-4 mt-0.5 accent-slate-900 rounded border-slate-300"
                   />
-                  <div>
-                    <span className="block font-bold text-indigo-700 dark:text-indigo-400 flex items-center gap-1.5">
-                      <Database className="w-3 h-3" />
+                  <div className="flex-1">
+                    <span className="block font-medium text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                      <Database className="w-3.5 h-3.5 text-slate-500" />
                       Auto-Index to Comparison Repository
-                      <span className="px-1.5 py-0.2 rounded text-[9px] font-black uppercase tracking-wider bg-indigo-100 dark:bg-indigo-950/80 text-indigo-800 dark:text-indigo-300">
-                        Network Effect
+                      <span className="px-1.5 py-0.2 rounded font-mono text-[9px] bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
+                        Peer Match
                       </span>
                     </span>
                     <span className="text-[11px] text-slate-400 font-normal">
                       {ephemeralMode 
-                        ? 'Disabled: Zero-Knowledge Ephemeral Mode is active (no storage or repository retention guaranteed).'
-                        : 'Anonymously chunks and stores this paper\'s fingerprints in your institutional database so future scans catch peer collusion.'}
+                        ? 'Disabled: Zero-Knowledge Ephemeral Mode guarantees no repository indexing.'
+                        : 'Stores anonymous fingerprints in the institutional database to detect student-to-student sharing.'}
                     </span>
                   </div>
                 </label>
 
                 {/* 4. Zero-Knowledge / Ephemeral Mode */}
-                <label className="flex items-start gap-2.5 cursor-pointer text-xs font-semibold text-slate-700 dark:text-slate-300 select-none sm:col-span-2 pt-1 border-t border-slate-200/60 dark:border-slate-800">
+                <label className="flex items-start gap-3 p-3 cursor-pointer text-xs select-none">
                   <input
                     type="checkbox"
                     checked={ephemeralMode}
                     onChange={(e) => setEphemeralMode(e.target.checked)}
-                    className="w-4 h-4 mt-0.5 text-purple-600 rounded focus:ring-purple-500 border-slate-300"
+                    className="w-4 h-4 mt-0.5 accent-slate-900 rounded border-slate-300"
                   />
-                  <div>
-                    <span className="block font-bold text-purple-700 dark:text-purple-400 flex items-center gap-1">
-                      <EyeOff className="w-3 h-3" />
+                  <div className="flex-1">
+                    <span className="block font-medium text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                      <EyeOff className="w-3.5 h-3.5 text-slate-500" />
                       Zero-Knowledge Ephemeral Mode
                     </span>
                     <span className="text-[11px] text-slate-400 font-normal">
-                      Paper is processed exclusively in-memory. Never indexed into student repositories or stored in database history.
+                      In-memory processing only. Document content is deleted immediately after the audit report is generated.
                     </span>
                   </div>
                 </label>
               </div>
 
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-1">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-2">
                 <div className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
                   <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-                  Institutional Reference Database Active (10 Core Repositories)
+                  <span>4 Global Academic Sources Connected</span>
                 </div>
 
                 <Button
-                  size="lg"
+                  size="default"
                   disabled={!file}
                   onClick={handleUploadAndScan}
-                  className="w-full sm:w-auto px-8 shadow-indigo-500/25"
+                  className="w-full sm:w-auto px-6 font-semibold"
                 >
                   <span>Run Originality Audit</span>
-                  <ArrowRight className="w-4 h-4 ml-2" />
+                  <ArrowRight className="w-3.5 h-3.5 ml-2" />
                 </Button>
               </div>
             </div>

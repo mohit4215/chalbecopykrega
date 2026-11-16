@@ -221,22 +221,22 @@ function MainApp() {
 
           {/* Source Code AST Banner */}
           {report.code_analysis && (
-            <div className="mb-4 p-3.5 bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-950/40 dark:to-teal-950/40 border border-emerald-200 dark:border-emerald-800 rounded-2xl flex items-center justify-between text-xs">
+            <div className="mb-4 p-3 bg-white dark:bg-[#0d121f] border border-slate-200 dark:border-slate-800 rounded-lg flex items-center justify-between text-xs shadow-2xs">
               <div className="flex items-center gap-2.5">
-                <div className="p-1.5 rounded-lg bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300">
+                <div className="p-1 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
                   <Code2 className="w-4 h-4" />
                 </div>
                 <div>
-                  <p className="font-bold text-slate-800 dark:text-slate-100">
+                  <p className="font-semibold text-slate-800 dark:text-slate-100">
                     Source Code AST Structural Protection Active
                   </p>
-                  <p className="text-slate-500 dark:text-slate-400">
+                  <p className="text-slate-500 dark:text-slate-400 text-[11px]">
                     Identifiers normalized across {report.code_analysis.unique_identifiers_count || 'all'} tokens • Variable-renaming obfuscation neutralized
                   </p>
                 </div>
               </div>
               <Button size="xs" variant="outline" onClick={() => setIsCodeModalOpen(true)}>
-                Open AST Inspector
+                AST Inspector
               </Button>
             </div>
           )}
