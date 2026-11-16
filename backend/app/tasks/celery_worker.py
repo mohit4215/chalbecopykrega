@@ -7,7 +7,7 @@ from typing import Dict, Any, Optional
 from celery import Celery
 from sqlalchemy import select
 
-from app.models.db_models import User, ScanHistory
+from app.models.db_models import User, ScanHistory, RepositoryDocument
 from app.services.database import AsyncSessionLocal
 from app.services.ingestion_pipeline import DocumentExtractionPipeline
 from app.services.knowledge_base import vector_db, seed_reference_corpus
@@ -254,7 +254,8 @@ def process_plagiarism_document(
     user_id: str,
     enable_web_search: bool = True,
     esl_mode: bool = False,
-    ephemeral_mode: bool = False
+    ephemeral_mode: bool = False,
+    auto_index: bool = True
 ) -> Dict[str, Any]:
     """
     Asynchronous Celery background task:
@@ -424,6 +425,8 @@ def process_plagiarism_document(
             "esl_mode": esl_mode,
             "ephemeral_mode": ephemeral_mode,
             "zero_retention_guaranteed": ephemeral_mode,
+            "auto_index": auto_index and not ephemeral_mode,
+            "indexed_in_repository": auto_index and not ephemeral_mode,
             "code_analysis": code_analysis,
             "adversarial_integrity": adversarial_audit,
             "certificate": certificate_data,
@@ -458,6 +461,29 @@ def process_plagiarism_document(
                         report_json=final_payload
                     )
                     db.add(scan_record)
+
+                    # Auto-Index Scanned Papers (Corpus Expansion Network Effect)
+                    if auto_index:
+                        repo_doc_id = f"repo_sub_{new_scan_id[:12]}"
+                        repo_doc = RepositoryDocument(
+                            id=repo_doc_id,
+                            title=filename,
+                            author="Anonymous Student Submission",
+                            category="Submitted Student Work",
+                            institution="Institutional Submissions (Auto-Indexed)",
+                            full_text=extraction_result.cleaned_text,
+                            chunk_count=len(chunks),
+                            word_count=extraction_result.metadata.total_words,
+                            is_active=True
+                        )
+                        db.add(repo_doc)
+                        vector_db.index_submission(
+                            document_id=repo_doc_id,
+                            student_name="Anonymous Student Submission",
+                            title=filename,
+                            chunks=chunk_strings,
+                            category="Submitted Student Work"
+                        )
                 await db.commit()
 
         _run_coroutine(persist_db())

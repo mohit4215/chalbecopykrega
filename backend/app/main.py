@@ -234,6 +234,7 @@ class ProgrammaticScanRequest(BaseModel):
     title: Optional[str] = Field(default="API_Scan_Document.txt", description="Document title")
     enable_web_search: bool = Field(default=True, description="Enable live internet cross-referencing")
     save_to_repository: bool = Field(default=False, description="Index document into Institutional Repository")
+    auto_index: bool = Field(default=True, description="Auto-index scanned paper into institutional comparison repository (disabled if ephemeral_mode is active)")
     esl_mode: bool = Field(default=False, description="Enable ESL Student Bias Shield for non-native English writers")
     ephemeral_mode: bool = Field(default=False, description="Zero-Knowledge / Ephemeral Mode: no persistent storage")
 
@@ -755,6 +756,7 @@ async def check_plagiarism_async(
     enable_web_search: bool = Form(True, description="Enable live internet cross-referencing"),
     esl_mode: bool = Form(False, description="Enable ESL Student Bias Shield for non-native English writers"),
     ephemeral_mode: bool = Form(False, description="Zero-Knowledge Mode: scan without saving to database or repository"),
+    auto_index: bool = Form(True, description="Auto-index scanned paper into institutional repository (disabled in Ephemeral Mode)"),
     current_user: Optional[User] = Depends(get_optional_current_user),
     db: AsyncSession = Depends(get_db_session)
 ):
@@ -814,6 +816,7 @@ async def check_plagiarism_async(
                     enable_web_search=enable_web_search,
                     esl_mode=esl_mode,
                     ephemeral_mode=ephemeral_mode,
+                    auto_index=auto_index,
                 )
             )
             return TaskSubmissionResponse(
@@ -848,6 +851,7 @@ async def check_plagiarism_async(
                     "enable_web_search": enable_web_search,
                     "esl_mode": esl_mode,
                     "ephemeral_mode": ephemeral_mode,
+                    "auto_index": auto_index,
                 },
                 task_id=task_id,
             )
@@ -1743,8 +1747,8 @@ async def programmatic_audit_scan(
             "renaming_protection": "Active (AST token normalization applied)"
         }
 
-    # Only save to institutional repository if explicitly requested AND not ephemeral mode
-    if payload.save_to_repository and not payload.ephemeral_mode:
+    # Only save to institutional repository if requested / auto-indexed AND not ephemeral mode
+    if (payload.save_to_repository or payload.auto_index) and not payload.ephemeral_mode:
         repo_doc = RepositoryDocument(
             id=doc_id,
             title=payload.title or "Submitted Document",

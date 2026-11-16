@@ -19,7 +19,8 @@ import {
   ArrowRight,
   Shield,
   EyeOff,
-  Code2
+  Code2,
+  Database
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { cn } from '../lib/utils';
@@ -71,6 +72,7 @@ export default function UploadComponent({ onScanComplete, isLoading, setIsLoadin
   const [enableWeb, setEnableWeb] = useState(true);
   const [eslMode, setEslMode] = useState(false);
   const [ephemeralMode, setEphemeralMode] = useState(false);
+  const [autoIndex, setAutoIndex] = useState(true);
   const [errorMessage, setErrorMessage] = useState('');
 
   // Task & Progress state
@@ -285,6 +287,7 @@ export default function UploadComponent({ onScanComplete, isLoading, setIsLoadin
       formData.append('enable_web_search', enableWeb ? 'true' : 'false');
       formData.append('esl_mode', eslMode ? 'true' : 'false');
       formData.append('ephemeral_mode', ephemeralMode ? 'true' : 'false');
+      formData.append('auto_index', (!ephemeralMode && autoIndex) ? 'true' : 'false');
 
       const response = await authFetch('/api/check-plagiarism', {
         method: 'POST',
@@ -629,7 +632,34 @@ export default function UploadComponent({ onScanComplete, isLoading, setIsLoadin
                   </div>
                 </label>
 
-                {/* 3. Zero-Knowledge / Ephemeral Mode */}
+                {/* 3. Auto-Index to Comparison Repository */}
+                <label className={`flex items-start gap-2.5 text-xs font-semibold select-none sm:col-span-2 pt-1 border-t border-slate-200/60 dark:border-slate-800 ${
+                  ephemeralMode ? 'opacity-50 cursor-not-allowed text-slate-400' : 'cursor-pointer text-slate-700 dark:text-slate-300'
+                }`}>
+                  <input
+                    type="checkbox"
+                    checked={!ephemeralMode && autoIndex}
+                    disabled={ephemeralMode}
+                    onChange={(e) => setAutoIndex(e.target.checked)}
+                    className="w-4 h-4 mt-0.5 text-indigo-600 rounded focus:ring-indigo-500 border-slate-300"
+                  />
+                  <div>
+                    <span className="block font-bold text-indigo-700 dark:text-indigo-400 flex items-center gap-1.5">
+                      <Database className="w-3 h-3" />
+                      Auto-Index to Comparison Repository
+                      <span className="px-1.5 py-0.2 rounded text-[9px] font-black uppercase tracking-wider bg-indigo-100 dark:bg-indigo-950/80 text-indigo-800 dark:text-indigo-300">
+                        Network Effect
+                      </span>
+                    </span>
+                    <span className="text-[11px] text-slate-400 font-normal">
+                      {ephemeralMode 
+                        ? 'Disabled: Zero-Knowledge Ephemeral Mode is active (no storage or repository retention guaranteed).'
+                        : 'Anonymously chunks and stores this paper\'s fingerprints in your institutional database so future scans catch peer collusion.'}
+                    </span>
+                  </div>
+                </label>
+
+                {/* 4. Zero-Knowledge / Ephemeral Mode */}
                 <label className="flex items-start gap-2.5 cursor-pointer text-xs font-semibold text-slate-700 dark:text-slate-300 select-none sm:col-span-2 pt-1 border-t border-slate-200/60 dark:border-slate-800">
                   <input
                     type="checkbox"
