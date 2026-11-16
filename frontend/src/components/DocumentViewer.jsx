@@ -129,44 +129,44 @@ export default function DocumentViewer({
   };
 
   return (
-    <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-sm border border-slate-200 dark:border-slate-800 flex flex-col h-full overflow-hidden transition-colors">
+    <div className="bg-white dark:bg-[#0d121f] rounded-xl shadow-2xs border border-slate-200 dark:border-slate-800 flex flex-col h-full overflow-hidden transition-colors">
       {/* Viewer Header */}
-      <div className="px-6 py-4 bg-slate-50/80 dark:bg-slate-900/80 border-b border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2.5">
+      <div className="px-5 py-3 bg-slate-50/70 dark:bg-slate-900/60 border-b border-slate-200/80 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
           <FileText className="w-4 h-4 text-slate-500 dark:text-slate-400" />
-          <span className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
-            Document Originality Viewer
+          <span className="text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300 font-mono">
+            Document Viewer
           </span>
-          <span className="text-xs px-2.5 py-0.5 rounded-full bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold">
+          <span className="text-[11px] px-2 py-0.5 rounded font-mono bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 tabular-nums">
             {matches.length} Matched Spans
           </span>
         </div>
 
         {/* Legend & Controls */}
-        <div className="flex items-center gap-4 text-xs font-semibold text-slate-600 dark:text-slate-400">
+        <div className="flex items-center gap-4 text-xs font-medium text-slate-600 dark:text-slate-400">
           <div className="hidden sm:flex items-center gap-3">
             <span className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-rose-500 inline-block"></span>
+              <span className="w-2 h-2 rounded-full bg-rose-500 inline-block"></span>
               Exact Match
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-amber-500 inline-block"></span>
+              <span className="w-2 h-2 rounded-full bg-amber-500 inline-block"></span>
               Paraphrased
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-blue-500 inline-block"></span>
+              <span className="w-2 h-2 rounded-full bg-slate-500 inline-block"></span>
               Web Citation
             </span>
           </div>
 
           {/* Font Size Zoom Controls */}
-          <div className="flex items-center border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden p-0.5 bg-white dark:bg-slate-800">
+          <div className="flex items-center border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden p-0.5 bg-white dark:bg-slate-800">
             <button
               type="button"
               onClick={() => setFontSize('sm')}
               className={cn(
-                'px-2 py-1 text-[11px] font-bold rounded-lg transition',
-                fontSize === 'sm' ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
+                'px-2 py-0.5 text-[11px] font-semibold rounded transition',
+                fontSize === 'sm' ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900' : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
               )}
               title="Small text"
             >
@@ -176,8 +176,8 @@ export default function DocumentViewer({
               type="button"
               onClick={() => setFontSize('base')}
               className={cn(
-                'px-2 py-1 text-[11px] font-bold rounded-lg transition',
-                fontSize === 'base' ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
+                'px-2 py-0.5 text-[11px] font-semibold rounded transition',
+                fontSize === 'base' ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900' : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
               )}
               title="Standard text"
             >
@@ -187,8 +187,8 @@ export default function DocumentViewer({
               type="button"
               onClick={() => setFontSize('lg')}
               className={cn(
-                'px-2 py-1 text-[11px] font-bold rounded-lg transition',
-                fontSize === 'lg' ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
+                'px-2 py-0.5 text-[11px] font-semibold rounded transition',
+                fontSize === 'lg' ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900' : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
               )}
               title="Large text"
             >

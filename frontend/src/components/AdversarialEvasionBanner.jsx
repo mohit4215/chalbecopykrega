@@ -19,34 +19,34 @@ export default function AdversarialEvasionBanner({ adversarialIntegrity }) {
   } = adversarialIntegrity;
 
   return (
-    <div className="mb-5 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 p-4 shadow-sm text-xs space-y-2">
+    <div className="mb-4 rounded-lg bg-amber-50/80 dark:bg-amber-950/30 border border-amber-300/80 dark:border-amber-800/80 p-3.5 shadow-2xs text-xs space-y-2">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-start gap-2.5">
-          <div className="p-1.5 bg-amber-100 dark:bg-amber-900/60 text-amber-700 dark:text-amber-300 rounded-lg shrink-0 mt-0.5">
+          <div className="p-1 bg-amber-100 dark:bg-amber-900/60 text-amber-800 dark:text-amber-200 rounded shrink-0 mt-0.5">
             <ShieldAlert className="w-4 h-4" />
           </div>
           <div>
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="font-black text-amber-900 dark:text-amber-200">
+              <span className="font-semibold text-amber-900 dark:text-amber-200">
                 Adversarial Evasion Attempt Neutralized
               </span>
-              <span className={`px-2 py-0.5 text-[9px] font-bold rounded-full uppercase ${
+              <span className={`px-1.5 py-0.2 text-[9px] font-mono font-semibold rounded uppercase ${
                 threat_level.includes('CRITICAL') 
-                  ? 'bg-rose-200 dark:bg-rose-900 text-rose-900 dark:text-rose-200'
-                  : 'bg-amber-200 dark:bg-amber-900 text-amber-900 dark:text-amber-200'
+                  ? 'bg-rose-100 dark:bg-rose-900/60 text-rose-800 dark:text-rose-200 border border-rose-200 dark:border-rose-800'
+                  : 'bg-amber-100 dark:bg-amber-900/60 text-amber-900 dark:text-amber-200 border border-amber-200 dark:border-amber-800'
               }`}>
                 {threat_level.replace(/_/g, ' ')}
               </span>
             </div>
-            <p className="text-amber-800 dark:text-amber-300 mt-0.5">
+            <p className="text-amber-800 dark:text-amber-300 mt-0.5 leading-relaxed">
               Detected <strong>{homoglyphs_detected_count} Cyrillic/Greek homoglyphs</strong> and <strong>{zero_width_chars_count} invisible characters</strong>
-              {punctuation_splits_count > 0 && <span> and <strong>{punctuation_splits_count} punctuation word splits</strong></span>} intended to bypass similarity detection. Text was unmasked to canonical Latin ASCII prior to vector scanning.
+              {punctuation_splits_count > 0 && <span> and <strong>{punctuation_splits_count} punctuation word splits</strong></span>} intended to bypass similarity detection. Text unmasked to canonical ASCII prior to comparison.
             </p>
 
             {evasion_tactics_detected.length > 0 && (
               <div className="flex flex-wrap gap-1 mt-1.5">
                 {evasion_tactics_detected.map((tactic, tIdx) => (
-                  <span key={tIdx} className="px-2 py-0.5 rounded-full bg-amber-200/70 dark:bg-amber-900/70 text-amber-900 dark:text-amber-200 text-[10px] font-semibold">
+                  <span key={tIdx} className="px-1.5 py-0.2 rounded font-mono bg-amber-100 dark:bg-amber-900/60 text-amber-900 dark:text-amber-200 text-[9px] font-medium border border-amber-200/60 dark:border-amber-800/60">
                     {tactic}
                   </span>
                 ))}
@@ -57,15 +57,15 @@ export default function AdversarialEvasionBanner({ adversarialIntegrity }) {
 
         <button
           onClick={() => setIsExpanded(!isExpanded)}
-          className="text-amber-900 dark:text-amber-200 font-bold flex items-center gap-1 hover:underline shrink-0 self-start sm:self-auto"
+          className="text-amber-900 dark:text-amber-200 font-medium flex items-center gap-1 hover:underline shrink-0 self-start sm:self-auto text-xs"
         >
           {isExpanded ? (
             <>
-              Hide Tampering Logs <ChevronUp className="w-4 h-4" />
+              Hide Logs <ChevronUp className="w-3.5 h-3.5" />
             </>
           ) : (
             <>
-              Inspect Intercepted Characters <ChevronDown className="w-4 h-4" />
+              Inspect Intercepted Characters <ChevronDown className="w-3.5 h-3.5" />
             </>
           )}
         </button>

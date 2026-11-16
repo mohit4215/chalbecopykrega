@@ -32,88 +32,88 @@ export default function OriginalityCertificateModal({ report, isOpen, onClose })
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 max-w-2xl w-full max-h-[92vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+      <div className="bg-white dark:bg-[#0d121f] rounded-xl shadow-lg border border-slate-200 dark:border-slate-800 max-w-2xl w-full max-h-[92vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
         {/* Modal Top Bar */}
-        <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/70 flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <div className="p-2 bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400 rounded-xl">
-              <Award className="w-5 h-5" />
+        <div className="px-5 py-3 border-b border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/70 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="p-1.5 bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 rounded-lg">
+              <Award className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="text-base font-black text-slate-900 dark:text-slate-100">
+              <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
                 Official Originality Certificate
               </h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                Tamper-proof verifiable credential for journals, professors, and employers.
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                Verifiable credential for academic departments, journals, and repositories.
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+            className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg transition"
           >
-            <X className="w-5 h-5" />
+            <X className="w-4 h-4" />
           </button>
         </div>
 
         {/* Certificate Card Preview (Printable) */}
-        <div className="p-6 overflow-y-auto flex-1 space-y-5">
-          <div className="p-6 rounded-3xl bg-gradient-to-b from-amber-50/40 via-white to-amber-50/20 dark:from-slate-900 dark:via-slate-900 dark:to-slate-800 border-2 border-amber-300 dark:border-amber-700/60 shadow-lg relative overflow-hidden">
+        <div className="p-5 overflow-y-auto flex-1 space-y-4">
+          <div className="p-5 rounded-xl bg-white dark:bg-[#090d16] border border-slate-300 dark:border-slate-700 shadow-xs relative overflow-hidden">
             {/* Watermark / Seal Background */}
             <div className="absolute right-4 bottom-4 opacity-5 pointer-events-none">
-              <ShieldCheck className="w-64 h-64 text-amber-600" />
+              <ShieldCheck className="w-64 h-64 text-slate-900 dark:text-slate-100" />
             </div>
 
             {/* Certificate Header */}
-            <div className="text-center pb-5 border-b border-amber-200/60 dark:border-amber-800/60">
-              <span className="text-[10px] uppercase font-black tracking-widest text-amber-700 dark:text-amber-400 bg-amber-100 dark:bg-amber-950/80 px-3 py-1 rounded-full border border-amber-200 dark:border-amber-800">
+            <div className="text-center pb-4 border-b border-slate-200 dark:border-slate-800">
+              <span className="text-[10px] uppercase font-mono tracking-widest text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2.5 py-0.5 rounded border border-slate-200 dark:border-slate-700">
                 Poach Academic Integrity Protocol
               </span>
-              <h2 className="text-2xl font-black text-slate-900 dark:text-slate-100 mt-2 tracking-tight">
+              <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100 mt-2 tracking-tight">
                 Certificate of Originality & Authorship
               </h2>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                Certificate ID: <strong className="font-mono text-slate-700 dark:text-slate-300">{cert.certificate_id}</strong>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 font-mono">
+                Certificate ID: <strong className="text-slate-700 dark:text-slate-300">{cert.certificate_id}</strong>
               </p>
             </div>
 
             {/* Document Title & Grant Text */}
-            <div className="py-5 text-center space-y-1">
-              <p className="text-xs text-slate-500 uppercase tracking-wider font-semibold">
+            <div className="py-4 text-center space-y-1">
+              <p className="text-[11px] text-slate-500 uppercase tracking-wider font-medium">
                 This certifies that the scholarly document entitled:
               </p>
-              <h3 className="text-lg font-black text-indigo-700 dark:text-indigo-400 max-w-lg mx-auto truncate">
+              <h3 className="text-base font-bold text-slate-900 dark:text-slate-100 max-w-lg mx-auto truncate">
                 &ldquo;{cert.document_title}&rdquo;
               </h3>
-              <p className="text-xs text-slate-600 dark:text-slate-400 max-w-md mx-auto pt-1">
-                has undergone full multi-vector plagiarism cross-referencing and heuristic AI detection audit under verified academic parameters.
+              <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto pt-0.5 leading-relaxed">
+                has undergone multi-vector similarity cross-referencing and heuristic AI detection audit under verified academic parameters.
               </p>
             </div>
 
             {/* Scores Grid */}
-            <div className="grid grid-cols-3 gap-3 my-4 text-center">
-              <div className="p-3 bg-white dark:bg-slate-800/80 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
-                <div className="text-[10px] font-bold uppercase text-slate-400">Originality Score</div>
-                <div className="text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-0.5">
+            <div className="grid grid-cols-3 gap-2.5 my-3 text-center">
+              <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-200 dark:border-slate-700">
+                <div className="text-[10px] font-mono uppercase text-slate-500">Originality Score</div>
+                <div className="text-xl font-bold text-emerald-600 dark:text-emerald-400 mt-0.5 tabular-nums font-mono">
                   {cert.originality_score}%
                 </div>
-                <div className="text-[10px] text-slate-500 font-semibold">Verified Clean</div>
+                <div className="text-[10px] text-slate-500">Verified Clean</div>
               </div>
 
-              <div className="p-3 bg-white dark:bg-slate-800/80 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
-                <div className="text-[10px] font-bold uppercase text-slate-400">Similarity Index</div>
-                <div className="text-2xl font-black text-slate-800 dark:text-slate-200 mt-0.5">
+              <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-200 dark:border-slate-700">
+                <div className="text-[10px] font-mono uppercase text-slate-500">Similarity Index</div>
+                <div className="text-xl font-bold text-slate-800 dark:text-slate-200 mt-0.5 tabular-nums font-mono">
                   {cert.overall_score}%
                 </div>
-                <div className="text-[10px] text-slate-500 font-semibold">Overlap Over Reference</div>
+                <div className="text-[10px] text-slate-500">Overlap Over Corpus</div>
               </div>
 
-              <div className="p-3 bg-white dark:bg-slate-800/80 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
-                <div className="text-[10px] font-bold uppercase text-slate-400">AI Writing Prob.</div>
-                <div className="text-2xl font-black text-violet-600 dark:text-violet-400 mt-0.5">
+              <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-200 dark:border-slate-700">
+                <div className="text-[10px] font-mono uppercase text-slate-500">AI Writing Prob.</div>
+                <div className="text-xl font-bold text-slate-700 dark:text-slate-300 mt-0.5 tabular-nums font-mono">
                   {cert.ai_probability}%
                 </div>
-                <div className="text-[10px] text-slate-500 font-semibold">Human Authorship</div>
+                <div className="text-[10px] text-slate-500">Human Authorship</div>
               </div>
             </div>
 
