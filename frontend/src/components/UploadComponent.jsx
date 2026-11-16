@@ -16,7 +16,10 @@ import {
   Search, 
   Clock, 
   Loader2,
-  ArrowRight
+  ArrowRight,
+  Shield,
+  EyeOff,
+  Code2
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { cn } from '../lib/utils';
@@ -38,6 +41,23 @@ The Python programming language was conceived by Guido van Rossum in the late 19
 5. Original Empirical Contributions
 In our 14-epoch experimental study using 4-bit quantized Low-Rank Adaptation (LoRA), we achieved a 68% reduction in GPU VRAM consumption while preserving validation perplexity within 0.04 of the full-precision baseline.`;
 
+const SAMPLE_CODE_TEXT = `# Algorithm: Binary Search and Array Normalization
+def search_and_compute(data_array, target_value):
+    """Performs binary lookup and normalizes scores."""
+    low_idx = 0
+    high_idx = len(data_array) - 1
+    found_pos = -1
+    while low_idx <= high_idx:
+        mid_idx = (low_idx + high_idx) // 2
+        if data_array[mid_idx] == target_value:
+            found_pos = mid_idx
+            break
+        elif data_array[mid_idx] < target_value:
+            low_idx = mid_idx + 1
+        else:
+            high_idx = mid_idx - 1
+    return found_pos`;
+
 const STAGES = [
   { key: 'extracting', label: 'Extracting text & OCR', icon: FileText, defaultPct: 25 },
   { key: 'vectorizing', label: 'Vectorizing & DB search', icon: Layers, defaultPct: 55 },
@@ -49,6 +69,8 @@ export default function UploadComponent({ onScanComplete, isLoading, setIsLoadin
   const { token, authFetch, loginAsDemo } = useAuth();
   const [file, setFile] = useState(null);
   const [enableWeb, setEnableWeb] = useState(true);
+  const [eslMode, setEslMode] = useState(false);
+  const [ephemeralMode, setEphemeralMode] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
   // Task & Progress state
@@ -77,7 +99,7 @@ export default function UploadComponent({ onScanComplete, isLoading, setIsLoadin
       if (rej.errors && rej.errors[0]?.code === 'file-too-large') {
         setErrorMessage('File size exceeds the 10 MB limit. Please upload a smaller document.');
       } else {
-        setErrorMessage('Unsupported format. Please upload a PDF, DOCX, or plain text file.');
+        setErrorMessage('Unsupported format. Please upload a PDF, DOCX, TXT, or source code file (.py, .js, .cpp, .java).');
       }
       return;
     }
@@ -93,6 +115,11 @@ export default function UploadComponent({ onScanComplete, isLoading, setIsLoadin
       'application/pdf': ['.pdf'],
       'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'],
       'text/plain': ['.txt'],
+      'text/x-python': ['.py'],
+      'text/javascript': ['.js', '.jsx'],
+      'text/typescript': ['.ts', '.tsx'],
+      'text/x-java-source': ['.java'],
+      'text/x-c': ['.c', '.cpp', '.cs', '.go', '.rs'],
     },
     maxSize: 10 * 1024 * 1024,
     multiple: false,
@@ -102,6 +129,13 @@ export default function UploadComponent({ onScanComplete, isLoading, setIsLoadin
   const handleUseSampleDoc = () => {
     const sampleBlob = new Blob([SAMPLE_DEMO_TEXT], { type: 'text/plain' });
     const sampleFile = new File([sampleBlob], 'Sample_NLP_Survey_Paper.txt', { type: 'text/plain' });
+    setFile(sampleFile);
+    setErrorMessage('');
+  };
+
+  const handleUseSampleCode = () => {
+    const sampleBlob = new Blob([SAMPLE_CODE_TEXT], { type: 'text/plain' });
+    const sampleFile = new File([sampleBlob], 'sample_algorithm.py', { type: 'text/plain' });
     setFile(sampleFile);
     setErrorMessage('');
   };
@@ -249,6 +283,8 @@ export default function UploadComponent({ onScanComplete, isLoading, setIsLoadin
       const formData = new FormData();
       formData.append('file', file);
       formData.append('enable_web_search', enableWeb ? 'true' : 'false');
+      formData.append('esl_mode', eslMode ? 'true' : 'false');
+      formData.append('ephemeral_mode', ephemeralMode ? 'true' : 'false');
 
       const response = await authFetch('/api/check-plagiarism', {
         method: 'POST',
@@ -290,20 +326,31 @@ export default function UploadComponent({ onScanComplete, isLoading, setIsLoadin
             Originality Verification
           </h2>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-            Accepts PDF (digital & scanned OCR), Word (.docx), and plain text (.txt) up to 10 MB.
+            Accepts PDF, Word (.docx), plain text (.txt), and Source Code (.py, .js, .cpp, .java, .cs) up to 10 MB.
           </p>
         </div>
 
         {!isLoading && (
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={handleUseSampleDoc}
-            className="self-start sm:self-auto border-indigo-200 text-indigo-700 dark:border-indigo-800 dark:text-indigo-300 bg-indigo-50/50 dark:bg-indigo-950/40"
-          >
-            <Sparkles className="w-3.5 h-3.5 mr-1.5 text-indigo-600" />
-            <span>Load Demo Paper</span>
-          </Button>
+          <div className="flex items-center gap-2 self-start sm:self-auto">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleUseSampleDoc}
+              className="border-indigo-200 text-indigo-700 dark:border-indigo-800 dark:text-indigo-300 bg-indigo-50/50 dark:bg-indigo-950/40 text-xs"
+            >
+              <Sparkles className="w-3.5 h-3.5 mr-1 text-indigo-600" />
+              <span>Load Demo Paper</span>
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleUseSampleCode}
+              className="border-slate-300 text-slate-700 dark:border-slate-700 dark:text-slate-300 bg-slate-50/50 dark:bg-slate-800/40 text-xs"
+            >
+              <Code2 className="w-3.5 h-3.5 mr-1 text-emerald-600" />
+              <span>Python Code</span>
+            </Button>
+          </div>
         )}
       </div>
 
@@ -541,7 +588,7 @@ export default function UploadComponent({ onScanComplete, isLoading, setIsLoadin
                       {isDragActive ? 'Release to upload document...' : 'Drag & drop your document here, or browse files'}
                     </p>
                     <p className="text-xs text-slate-400 mt-1 max-w-sm">
-                      Supports PDF (with automatic OCR for scanned pages), Word (.docx), and TXT files up to 10 MB.
+                      Supports PDF, Word (.docx), plain text, and Source Code (.py, .js, .cpp, .java) up to 10 MB.
                     </p>
                   </div>
                 )}
@@ -549,32 +596,75 @@ export default function UploadComponent({ onScanComplete, isLoading, setIsLoadin
             </div>
 
             {/* Options & Action Button */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-2">
-              <div className="flex flex-col gap-1.5">
-                <label className="flex items-center gap-2.5 cursor-pointer text-xs font-semibold text-slate-700 dark:text-slate-300 select-none">
+            <div className="space-y-4 pt-1">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3.5 rounded-2xl bg-slate-50/80 dark:bg-slate-800/40 border border-slate-200/70 dark:border-slate-800">
+                {/* 1. Web search */}
+                <label className="flex items-start gap-2.5 cursor-pointer text-xs font-semibold text-slate-700 dark:text-slate-300 select-none">
                   <input
                     type="checkbox"
                     checked={enableWeb}
                     onChange={(e) => setEnableWeb(e.target.checked)}
-                    className="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500 border-slate-300"
+                    className="w-4 h-4 mt-0.5 text-indigo-600 rounded focus:ring-indigo-500 border-slate-300"
                   />
-                  <span>Cross-reference billions of real-time web pages</span>
+                  <div>
+                    <span className="block font-bold">Live Internet Search</span>
+                    <span className="text-[11px] text-slate-400 font-normal">Cross-reference live Google & Bing indices</span>
+                  </div>
                 </label>
-                <div className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-1.5 pl-6">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                  Institutional Reference Database & Vector Index Active
-                </div>
+
+                {/* 2. ESL Student Bias Shield */}
+                <label className="flex items-start gap-2.5 cursor-pointer text-xs font-semibold text-slate-700 dark:text-slate-300 select-none">
+                  <input
+                    type="checkbox"
+                    checked={eslMode}
+                    onChange={(e) => setEslMode(e.target.checked)}
+                    className="w-4 h-4 mt-0.5 text-emerald-600 rounded focus:ring-emerald-500 border-slate-300"
+                  />
+                  <div>
+                    <span className="block font-bold text-emerald-700 dark:text-emerald-400 flex items-center gap-1">
+                      <Shield className="w-3 h-3" />
+                      ESL Student Bias Shield
+                    </span>
+                    <span className="text-[11px] text-slate-400 font-normal">Eliminates AI false positives on non-native writers</span>
+                  </div>
+                </label>
+
+                {/* 3. Zero-Knowledge / Ephemeral Mode */}
+                <label className="flex items-start gap-2.5 cursor-pointer text-xs font-semibold text-slate-700 dark:text-slate-300 select-none sm:col-span-2 pt-1 border-t border-slate-200/60 dark:border-slate-800">
+                  <input
+                    type="checkbox"
+                    checked={ephemeralMode}
+                    onChange={(e) => setEphemeralMode(e.target.checked)}
+                    className="w-4 h-4 mt-0.5 text-purple-600 rounded focus:ring-purple-500 border-slate-300"
+                  />
+                  <div>
+                    <span className="block font-bold text-purple-700 dark:text-purple-400 flex items-center gap-1">
+                      <EyeOff className="w-3 h-3" />
+                      Zero-Knowledge Ephemeral Mode
+                    </span>
+                    <span className="text-[11px] text-slate-400 font-normal">
+                      Paper is processed exclusively in-memory. Never indexed into student repositories or stored in database history.
+                    </span>
+                  </div>
+                </label>
               </div>
 
-              <Button
-                size="lg"
-                disabled={!file}
-                onClick={handleUploadAndScan}
-                className="w-full sm:w-auto px-8 shadow-indigo-500/25"
-              >
-                <span>Run Originality Audit</span>
-                <ArrowRight className="w-4 h-4 ml-2" />
-              </Button>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-1">
+                <div className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                  Institutional Reference Database Active (10 Core Repositories)
+                </div>
+
+                <Button
+                  size="lg"
+                  disabled={!file}
+                  onClick={handleUploadAndScan}
+                  className="w-full sm:w-auto px-8 shadow-indigo-500/25"
+                >
+                  <span>Run Originality Audit</span>
+                  <ArrowRight className="w-4 h-4 ml-2" />
+                </Button>
+              </div>
             </div>
           </motion.div>
         )}

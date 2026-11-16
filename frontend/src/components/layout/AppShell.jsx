@@ -29,6 +29,7 @@ export default function AppShell({
   activeTab,
   onTabChange,
   onStartTour,
+  onOpenCodeInspector,
   report,
   children
 }) {
@@ -42,6 +43,7 @@ export default function AppShell({
   const navItems = [
     { id: 'scan', label: 'New Scan', icon: UploadCloud, badge: null },
     { id: 'repository', label: 'Reference Database', icon: Database, badge: 'Corpus' },
+    { id: 'code-inspector', label: 'Code AST Inspector', icon: Code2, badge: 'AST', action: onOpenCodeInspector },
     { id: 'history', label: 'Scan History', icon: History, badge: null },
     { id: 'pricing', label: 'Pricing Plans', icon: Sparkles, badge: isPro ? 'Active' : 'Upgrade' },
     { id: 'developers', label: 'Developer API', icon: Code2, badge: 'v1' },
@@ -59,9 +61,14 @@ export default function AppShell({
     });
   }
 
-  const handleNavClick = (tabId) => {
-    onTabChange(tabId);
-    setMobileMenuOpen(false);
+  const handleItemClick = (item) => {
+    if (item.action) {
+      item.action();
+      setMobileMenuOpen(false);
+    } else {
+      onTabChange(item.id);
+      setMobileMenuOpen(false);
+    }
   };
 
   return (
@@ -223,7 +230,7 @@ export default function AppShell({
                 <button
                   key={item.id}
                   type="button"
-                  onClick={() => handleNavClick(item.id)}
+                  onClick={() => handleItemClick(item)}
                   title={sidebarCollapsed ? item.label : undefined}
                   className={cn(
                     'w-full flex items-center gap-3 px-3.5 py-2.5 rounded-2xl text-xs font-bold transition-all group relative',
@@ -301,7 +308,7 @@ export default function AppShell({
                       <button
                         key={item.id}
                         type="button"
-                        onClick={() => handleNavClick(item.id)}
+                        onClick={() => handleItemClick(item)}
                         className={cn(
                           'w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition',
                           isActive

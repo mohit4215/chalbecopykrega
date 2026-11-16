@@ -1,7 +1,7 @@
 import React from 'react';
-import { X, ExternalLink, GitCompare, Flag } from 'lucide-react';
+import { X, ExternalLink, GitCompare, Flag, Quote } from 'lucide-react';
 
-export default function DiffModal({ match, isOpen, onClose, onFlagMatch }) {
+export default function DiffModal({ match, isOpen, onClose, onFlagMatch, onOpenCite }) {
   if (!isOpen || !match) return null;
 
   return (
@@ -79,6 +79,20 @@ export default function DiffModal({ match, isOpen, onClose, onFlagMatch }) {
             Classification: <strong className="uppercase">{match.match_type.replace('_', ' ')}</strong>
           </div>
           <div className="flex items-center gap-2.5">
+            {onOpenCite && (
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  onOpenCite(match);
+                }}
+                className="px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold rounded-xl text-xs flex items-center gap-1.5 transition border border-emerald-200 shadow-sm"
+                title="1-Click Smart Academic Citation"
+              >
+                <Quote className="w-3.5 h-3.5" />
+                <span>1-Click Cite</span>
+              </button>
+            )}
             {onFlagMatch && (
               <button
                 type="button"

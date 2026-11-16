@@ -49,6 +49,8 @@ from app.services.api_key_auth import (
 )
 from app.services.ai_detector import AIDetectionEngine
 from app.services.citation_filter import AcademicCitationFilter
+from app.services.code_plagiarism import CodePlagiarismEngine
+from app.services.citation_generator import SmartCitationGenerator
 from app.services.task_stream import subscribe_task_events, publish_task_event
 from app.services.storage_service import StorageService
 from app.services.stripe_service import StripeService, PLANS
@@ -228,6 +230,21 @@ class ProgrammaticScanRequest(BaseModel):
     title: Optional[str] = Field(default="API_Scan_Document.txt", description="Document title")
     enable_web_search: bool = Field(default=True, description="Enable live internet cross-referencing")
     save_to_repository: bool = Field(default=False, description="Index document into Institutional Repository")
+    esl_mode: bool = Field(default=False, description="Enable ESL Student Bias Shield for non-native English writers")
+    ephemeral_mode: bool = Field(default=False, description="Zero-Knowledge / Ephemeral Mode: no persistent storage")
+
+class CitationRequest(BaseModel):
+    matched_text: str = Field(..., min_length=2, description="Text snippet to generate academic citations for")
+    source_title: Optional[str] = Field(default="Academic Reference Literature", description="Title of the source")
+    source_author: Optional[str] = Field(default=None, description="Author of the source")
+    source_url: Optional[str] = Field(default=None, description="URL or DOI link")
+    institution: Optional[str] = Field(default="Institutional Repository", description="Publishing institution or journal")
+
+class CodeCompareRequest(BaseModel):
+    code_a: str = Field(..., min_length=5, description="First source code snippet or file content")
+    code_b: str = Field(..., min_length=5, description="Second source code snippet to compare against")
+    filename_a: Optional[str] = Field(default="submission_a.py", description="Filename of first snippet")
+    filename_b: Optional[str] = Field(default="submission_b.py", description="Filename of second snippet")
 
 class CreateRepositoryDocumentRequest(BaseModel):
     title: str = Field(..., min_length=2, max_length=255)
@@ -712,6 +729,8 @@ async def check_plagiarism_async(
     background_tasks: BackgroundTasks,
     file: UploadFile = Depends(validate_secure_file_upload),
     enable_web_search: bool = Form(True, description="Enable live internet cross-referencing"),
+    esl_mode: bool = Form(False, description="Enable ESL Student Bias Shield for non-native English writers"),
+    ephemeral_mode: bool = Form(False, description="Zero-Knowledge Mode: scan without saving to database or repository"),
     current_user: Optional[User] = Depends(get_optional_current_user),
     db: AsyncSession = Depends(get_db_session)
 ):
@@ -769,6 +788,8 @@ async def check_plagiarism_async(
                     filename=filename,
                     user_id=current_user.id,
                     enable_web_search=enable_web_search,
+                    esl_mode=esl_mode,
+                    ephemeral_mode=ephemeral_mode,
                 )
             )
             return TaskSubmissionResponse(
@@ -801,6 +822,8 @@ async def check_plagiarism_async(
                     "filename": filename,
                     "user_id": current_user.id,
                     "enable_web_search": enable_web_search,
+                    "esl_mode": esl_mode,
+                    "ephemeral_mode": ephemeral_mode,
                 },
                 task_id=task_id,
             )
@@ -1649,7 +1672,7 @@ async def programmatic_audit_scan(
         enable_web_search=payload.enable_web_search
     )
 
-    ai_analysis = AIDetectionEngine.analyze_text(clean_text)
+    ai_analysis = AIDetectionEngine.analyze_text(clean_text, esl_mode=payload.esl_mode)
     citation_res = AcademicCitationFilter.apply_filters(
         full_text=clean_text,
         matches=scan_report.get("matches", []),
@@ -1659,7 +1682,39 @@ async def programmatic_audit_scan(
         total_words=total_words
     )
 
-    if payload.save_to_repository:
+    # Enrich detected matches with 1-Click Smart Academic Citations
+    enriched_matches = []
+    for m in citation_res["active_matches"]:
+        source_title = m.get("source_title") or "Academic Reference Literature"
+        source_author = m.get("source_author")
+        source_url = m.get("source_url")
+        matched_text = m.get("matched_text") or m.get("matched_chunk_text", "")
+        cites = SmartCitationGenerator.generate_all_citations(
+            matched_text=matched_text,
+            source_title=source_title,
+            source_author=source_author,
+            source_url=source_url,
+            institution=m.get("source_category", "Institutional Repository")
+        )
+        enriched_m = dict(m)
+        enriched_m["smart_citations"] = cites
+        enriched_matches.append(enriched_m)
+
+    # Source code analysis if programming file
+    is_code = CodePlagiarismEngine.is_code_file(payload.title or "")
+    code_analysis = None
+    if is_code:
+        norm_tokens, id_map = CodePlagiarismEngine.normalize_identifiers(clean_text)
+        kgrams = CodePlagiarismEngine.extract_code_kgrams(norm_tokens)
+        code_analysis = {
+            "is_code_document": True,
+            "unique_identifiers_count": len(id_map),
+            "structural_kgrams_count": len(kgrams),
+            "renaming_protection": "Active (AST token normalization applied)"
+        }
+
+    # Only save to institutional repository if explicitly requested AND not ephemeral mode
+    if payload.save_to_repository and not payload.ephemeral_mode:
         repo_doc = RepositoryDocument(
             id=doc_id,
             title=payload.title or "Submitted Document",
@@ -1697,14 +1752,64 @@ async def programmatic_audit_scan(
         "originality_score": scan_report["originality_percentage"],
         "net_plagiarism_score": citation_res["net_plagiarism_score"],
         "net_originality_score": citation_res["net_originality_score"],
+        "esl_mode": payload.esl_mode,
+        "ephemeral_mode": payload.ephemeral_mode,
+        "zero_retention_guaranteed": payload.ephemeral_mode,
+        "code_analysis": code_analysis,
         "ai_detection": {
             "ai_probability": ai_analysis["ai_probability"],
             "human_probability": ai_analysis["human_probability"],
             "verdict": ai_analysis["verdict"],
-            "confidence": ai_analysis["confidence"]
+            "confidence": ai_analysis["confidence"],
+            "esl_shield_applied": ai_analysis.get("esl_shield_applied", False),
+            "sentence_analyses": ai_analysis.get("sentence_analyses", [])
         },
         "summary": scan_report["summary"],
-        "matches": citation_res["active_matches"]
+        "matches": enriched_matches
+    }
+
+
+# ------------------------------------------------------------------------------
+# 1-Click Smart Citations & Source Code Plagiarism Endpoints
+# ------------------------------------------------------------------------------
+
+@app.post("/api/citations/generate")
+async def generate_citation(
+    payload: CitationRequest
+):
+    """
+    1-Click Smart Academic Citation Assistant.
+    Generates APA 7th, MLA 9th, and Chicago 17th bibliography and in-text quotes
+    for remediating detected plagiarism matches into compliant scholarly citations.
+    """
+    return SmartCitationGenerator.generate_all_citations(
+        matched_text=payload.matched_text,
+        source_title=payload.source_title or "Academic Reference Literature",
+        source_author=payload.source_author,
+        source_url=payload.source_url,
+        institution=payload.institution
+    )
+
+
+@app.post("/api/code/compare")
+async def compare_code_files(
+    payload: CodeCompareRequest,
+    current_user: Optional[User] = Depends(get_optional_current_user)
+):
+    """
+    Source Code Structural Plagiarism Analysis Endpoint.
+    Performs identifier normalization (defeating variable renaming),
+    comment/whitespace stripping, and k-gram structural overlap comparison.
+    """
+    comparison = CodePlagiarismEngine.compare_code_submissions(
+        code_a=payload.code_a,
+        code_b=payload.code_b
+    )
+    return {
+        "status": "success",
+        "filename_a": payload.filename_a,
+        "filename_b": payload.filename_b,
+        "comparison": comparison
     }
 
 
