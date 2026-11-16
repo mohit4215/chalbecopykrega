@@ -1,20 +1,28 @@
-import React, { useMemo, useEffect, useRef } from 'react';
-import { FileText } from 'lucide-react';
+import React, { useMemo, useEffect, useRef, useState, useCallback } from 'react';
+import { FileText, Quote, X, Filter } from 'lucide-react';
 import { cn } from '../lib/utils';
 
 /**
- * High-performance Document Originality Viewer (Left Pane).
- * Renders large texts gracefully with zero DOM lag.
- * Features bi-directional auto-scroll synchronization with the Sources Sidebar.
+ * High-performance Document Originality Viewer (Screen B Left Column).
+ * Linear-meets-Stripe enterprise standard:
+ * - Asymmetric distraction-free reading pane
+ * - Overlaid red underline/highlight for Exact Matches & amber for Paraphrase Matches
+ * - Medium-style floating "Generate APA/MLA Citation" popover on text selection
+ * - Source-specific highlight filtering
+ * - Bi-directional auto-scroll synchronization
  */
 export default function DocumentViewer({
   fullText,
   matches = [],
   selectedMatchId,
   onSelectMatch,
+  filterSourceId = null,
+  onClearFilter,
+  onGenerateCitation,
 }) {
   const containerRef = useRef(null);
-  const [fontSize, setFontSize] = React.useState('base'); // 'sm' | 'base' | 'lg'
+  const [fontSize, setFontSize] = useState('base'); // 'sm' | 'base' | 'lg'
+  const [selectionPopover, setSelectionPopover] = useState(null);
 
   /**
    * Slices fullText into non-overlapping plain and highlighted segments
@@ -86,6 +94,41 @@ export default function DocumentViewer({
     }
   }, [selectedMatchId]);
 
+  // Medium-style floating selection popover handler
+  const handleMouseUp = useCallback(() => {
+    const selection = window.getSelection();
+    if (!selection || selection.isCollapsed) {
+      setSelectionPopover(null);
+      return;
+    }
+
+    const text = selection.toString().trim();
+    if (text.length < 4) {
+      setSelectionPopover(null);
+      return;
+    }
+
+    try {
+      const range = selection.getRangeAt(0);
+      const rect = range.getBoundingClientRect();
+      const parentRect = containerRef.current?.getBoundingClientRect();
+
+      if (rect && parentRect) {
+        // Calculate coordinate relative to container
+        const left = rect.left - parentRect.left + rect.width / 2;
+        const top = rect.top - parentRect.top - 44; // Position just above selection
+
+        setSelectionPopover({
+          text,
+          left: Math.max(60, Math.min(parentRect.width - 60, left)),
+          top: Math.max(10, top),
+        });
+      }
+    } catch {
+      setSelectionPopover(null);
+    }
+  }, []);
+
   const handleHighlightClick = (match) => {
     if (onSelectMatch) {
       onSelectMatch(match);
@@ -95,32 +138,41 @@ export default function DocumentViewer({
     const sourceCardEl = document.getElementById(`source-card-${match.id}`);
     if (sourceCardEl) {
       sourceCardEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      sourceCardEl.classList.add('ring-4', 'ring-indigo-500/50', 'transition-all');
+      sourceCardEl.classList.add('ring-2', 'ring-indigo-500', 'transition-all');
       setTimeout(() => {
-        sourceCardEl.classList.remove('ring-4', 'ring-indigo-500/50');
+        sourceCardEl.classList.remove('ring-2', 'ring-indigo-500');
       }, 1500);
     }
   };
 
-  const getHighlightClass = (match, isSelected) => {
-    let base = 'cursor-pointer rounded px-1.5 py-0.5 transition-all duration-150 inline font-medium select-text ';
+  const getHighlightClass = (match, isSelected, isFilteredOut) => {
+    if (isFilteredOut) {
+      return 'opacity-25 grayscale hover:opacity-80 transition cursor-pointer px-1 py-0.5 rounded select-text';
+    }
+
+    let base = 'cursor-pointer rounded px-1.5 py-0.5 transition-all duration-150 inline select-text font-medium ';
 
     if (match.match_type === 'exact_copy' || match.similarity_score >= 0.92) {
       base += isSelected
-        ? 'bg-rose-200 text-rose-950 dark:bg-rose-900/80 dark:text-rose-100 ring-2 ring-rose-600 shadow-sm underline decoration-rose-600 '
-        : 'bg-rose-100 text-rose-900 dark:bg-rose-950/60 dark:text-rose-200 border-b-2 border-rose-400 dark:border-rose-500 hover:bg-rose-200 dark:hover:bg-rose-900/50 ';
+        ? 'bg-rose-500/20 text-rose-800 dark:text-rose-200 ring-2 ring-rose-600 underline decoration-rose-600 '
+        : 'bg-rose-500/10 text-rose-700 dark:text-rose-300 border-b-2 border-rose-500 hover:bg-rose-500/20 underline decoration-rose-500 ';
     } else if (match.match_type === 'paraphrase') {
       base += isSelected
-        ? 'bg-amber-200 text-amber-950 dark:bg-amber-900/80 dark:text-amber-100 ring-2 ring-amber-600 shadow-sm underline decoration-amber-600 '
-        : 'bg-amber-100 text-amber-900 dark:bg-amber-950/60 dark:text-amber-200 border-b-2 border-amber-400 dark:border-amber-500 hover:bg-amber-200 dark:hover:bg-amber-900/50 ';
+        ? 'bg-amber-500/20 text-amber-900 dark:text-amber-200 ring-2 ring-amber-600 underline decoration-amber-600 '
+        : 'bg-amber-500/10 text-amber-800 dark:text-amber-300 border-b-2 border-amber-500 hover:bg-amber-500/20 ';
     } else {
       base += isSelected
-        ? 'bg-blue-200 text-blue-950 dark:bg-blue-900/80 dark:text-blue-100 ring-2 ring-blue-600 shadow-sm underline decoration-blue-600 '
-        : 'bg-blue-100 text-blue-900 dark:bg-blue-950/60 dark:text-blue-200 border-b-2 border-blue-400 dark:border-blue-500 hover:bg-blue-200 dark:hover:bg-blue-900/50 ';
+        ? 'bg-indigo-500/20 text-indigo-900 dark:text-indigo-200 ring-2 ring-indigo-600 underline decoration-indigo-600 '
+        : 'bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border-b-2 border-indigo-500 hover:bg-indigo-500/20 ';
     }
 
     return base;
   };
+
+  const activeFilteredSource = useMemo(() => {
+    if (!filterSourceId) return null;
+    return matches.find((m) => m.id === filterSourceId || m.source_id === filterSourceId);
+  }, [filterSourceId, matches]);
 
   const fontSizes = {
     sm: 'text-sm leading-relaxed',
@@ -129,21 +181,21 @@ export default function DocumentViewer({
   };
 
   return (
-    <div className="bg-white dark:bg-[#0d121f] rounded-xl shadow-2xs border border-slate-200 dark:border-slate-800 flex flex-col h-full overflow-hidden transition-colors">
+    <div className="bg-white dark:bg-zinc-900 rounded-xl shadow-2xs border border-zinc-200 dark:border-zinc-800 flex flex-col h-full overflow-hidden transition-colors">
       {/* Viewer Header */}
-      <div className="px-5 py-3 bg-slate-50/70 dark:bg-slate-900/60 border-b border-slate-200/80 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3">
+      <div className="px-5 py-3 bg-zinc-50/70 dark:bg-zinc-900/60 border-b border-zinc-200 dark:border-zinc-800 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
-          <FileText className="w-4 h-4 text-slate-500 dark:text-slate-400" />
-          <span className="text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300 font-mono">
+          <FileText className="w-4 h-4 text-zinc-500 dark:text-zinc-400" />
+          <span className="text-xs font-semibold uppercase tracking-wider text-zinc-700 dark:text-zinc-300 font-mono">
             Document Viewer
           </span>
-          <span className="text-[11px] px-2 py-0.5 rounded font-mono bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 tabular-nums">
+          <span className="text-[11px] px-2 py-0.5 rounded font-mono bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-700 tabular-nums">
             {matches.length} Matched Spans
           </span>
         </div>
 
         {/* Legend & Controls */}
-        <div className="flex items-center gap-4 text-xs font-medium text-slate-600 dark:text-slate-400">
+        <div className="flex items-center gap-4 text-xs font-medium text-zinc-600 dark:text-zinc-400">
           <div className="hidden sm:flex items-center gap-3">
             <span className="flex items-center gap-1.5">
               <span className="w-2 h-2 rounded-full bg-rose-500 inline-block"></span>
@@ -154,19 +206,21 @@ export default function DocumentViewer({
               Paraphrased
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-slate-500 inline-block"></span>
+              <span className="w-2 h-2 rounded-full bg-indigo-500 inline-block"></span>
               Web Citation
             </span>
           </div>
 
           {/* Font Size Zoom Controls */}
-          <div className="flex items-center border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden p-0.5 bg-white dark:bg-slate-800">
+          <div className="flex items-center border border-zinc-200 dark:border-zinc-700 rounded-lg overflow-hidden p-0.5 bg-white dark:bg-zinc-800">
             <button
               type="button"
               onClick={() => setFontSize('sm')}
               className={cn(
                 'px-2 py-0.5 text-[11px] font-semibold rounded transition',
-                fontSize === 'sm' ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900' : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
+                fontSize === 'sm'
+                  ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900'
+                  : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'
               )}
               title="Small text"
             >
@@ -177,7 +231,9 @@ export default function DocumentViewer({
               onClick={() => setFontSize('base')}
               className={cn(
                 'px-2 py-0.5 text-[11px] font-semibold rounded transition',
-                fontSize === 'base' ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900' : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
+                fontSize === 'base'
+                  ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900'
+                  : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'
               )}
               title="Standard text"
             >
@@ -188,7 +244,9 @@ export default function DocumentViewer({
               onClick={() => setFontSize('lg')}
               className={cn(
                 'px-2 py-0.5 text-[11px] font-semibold rounded transition',
-                fontSize === 'lg' ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900' : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
+                fontSize === 'lg'
+                  ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900'
+                  : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'
               )}
               title="Large text"
             >
@@ -198,11 +256,65 @@ export default function DocumentViewer({
         </div>
       </div>
 
+      {/* Active Source Filter Banner */}
+      {activeFilteredSource && (
+        <div className="px-5 py-2 bg-indigo-500/10 border-b border-indigo-500/20 flex items-center justify-between text-xs text-indigo-700 dark:text-indigo-300">
+          <div className="flex items-center gap-2 truncate">
+            <Filter className="w-3.5 h-3.5 shrink-0" />
+            <span className="font-semibold">Filtering highlights from source:</span>
+            <span className="font-mono truncate">{activeFilteredSource.source_title}</span>
+          </div>
+          {onClearFilter && (
+            <button
+              type="button"
+              onClick={onClearFilter}
+              className="flex items-center gap-1 px-2 py-0.5 rounded bg-indigo-500/20 hover:bg-indigo-500/30 text-[11px] font-semibold transition shrink-0 ml-3"
+            >
+              <X className="w-3 h-3" />
+              <span>Clear Filter</span>
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Main Document Body */}
       <div
         ref={containerRef}
-        className="flex-1 overflow-y-auto p-6 sm:p-10 font-serif text-slate-800 dark:text-slate-200 select-text"
+        onMouseUp={handleMouseUp}
+        className="relative flex-1 overflow-y-auto p-6 sm:p-10 font-serif text-zinc-800 dark:text-zinc-200 select-text"
       >
+        {/* Floating Medium-style Citation Assistant Popover */}
+        {selectionPopover && (
+          <div
+            style={{
+              position: 'absolute',
+              left: `${selectionPopover.left}px`,
+              top: `${selectionPopover.top}px`,
+              transform: 'translateX(-50%)',
+            }}
+            className="z-50 pointer-events-auto animate-in fade-in zoom-in-95 duration-100"
+          >
+            <button
+              type="button"
+              onClick={() => {
+                if (onGenerateCitation) {
+                  onGenerateCitation({
+                    matched_text: selectionPopover.text,
+                    source_title: 'Highlighted Manuscript Excerpt',
+                    source_author: 'Student / Manuscript',
+                  });
+                }
+                setSelectionPopover(null);
+                window.getSelection()?.removeAllRanges();
+              }}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-zinc-900 text-white dark:bg-white dark:text-zinc-900 text-xs font-semibold shadow-xl border border-zinc-700 dark:border-zinc-300 hover:scale-105 active:scale-95 transition-all select-none"
+            >
+              <Quote className="w-3.5 h-3.5 text-indigo-400 dark:text-indigo-600" />
+              <span>Generate APA/MLA Citation</span>
+            </button>
+          </div>
+        )}
+
         <div className={cn('max-w-3xl mx-auto whitespace-pre-wrap', fontSizes[fontSize])}>
           {textSegments.map((seg) => {
             if (seg.type === 'plain') {
@@ -210,13 +322,18 @@ export default function DocumentViewer({
             }
 
             const isSelected = selectedMatchId === seg.match.id;
+            const isFilteredOut = Boolean(
+              filterSourceId &&
+              seg.match.id !== filterSourceId &&
+              seg.match.source_id !== filterSourceId
+            );
 
             return (
               <mark
                 key={seg.key}
                 id={`highlight-${seg.match.id}`}
                 onClick={() => handleHighlightClick(seg.match)}
-                className={getHighlightClass(seg.match, isSelected)}
+                className={getHighlightClass(seg.match, isSelected, isFilteredOut)}
                 title={`Click to inspect matching source: ${seg.match.source_title} (${(seg.match.similarity_score * 100).toFixed(0)}% match)`}
               >
                 {seg.text}

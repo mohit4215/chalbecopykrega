@@ -76,14 +76,15 @@ export default {
         '2xl': '0 25px 50px -12px rgba(0, 0, 0, 0.10)',
       },
       fontFamily: {
-        sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
-        mono: ['JetBrains Mono', 'Fira Code', 'monospace'],
+        sans: ['Geist', 'Inter', 'system-ui', '-apple-system', 'sans-serif'],
+        mono: ['Geist Mono', 'JetBrains Mono', 'Fira Code', 'monospace'],
         serif: ['Merriweather', 'Georgia', 'serif'],
       },
       animation: {
         'fade-in': 'fadeIn 0.15s ease-out forwards',
         'slide-up': 'slideUp 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards',
         'pulse-subtle': 'pulseSubtle 2s infinite ease-in-out',
+        'cursor-blink': 'cursorBlink 0.9s step-start infinite',
       },
       keyframes: {
         fadeIn: {
@@ -97,6 +98,10 @@ export default {
         pulseSubtle: {
           '0%, 100%': { opacity: '1' },
           '50%': { opacity: '0.6' },
+        },
+        cursorBlink: {
+          '0%, 100%': { opacity: '1' },
+          '50%': { opacity: '0' },
         },
       },
     },
