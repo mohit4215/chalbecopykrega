@@ -43,14 +43,14 @@ export default function ScoreGauge({ overallScore, originalityScore, summary, ai
   const strokeDashoffset = circumference - (overallScore / 100) * circumference;
 
   return (
-    <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200">
+    <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 shadow-sm border border-slate-200 dark:border-slate-800 transition-colors">
       {/* Header */}
-      <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+      <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800">
         <div className="flex items-center gap-2.5">
           {theme.icon}
           <div>
-            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">Originality Report</h3>
-            <p className="text-sm font-extrabold text-slate-800">Overall Similarity Index</p>
+            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Originality Report</h3>
+            <p className="text-sm font-extrabold text-slate-800 dark:text-slate-100">Overall Similarity Index</p>
           </div>
         </div>
         <span className={`px-2.5 py-1 text-xs font-bold rounded-full ${theme.bgColor} ${theme.textColor} border ${theme.borderColor}`}>
@@ -66,7 +66,8 @@ export default function ScoreGauge({ overallScore, originalityScore, summary, ai
               cx="64"
               cy="64"
               r={radius}
-              stroke="#f1f5f9"
+              stroke="currentColor"
+              className="text-slate-100 dark:text-slate-800"
               strokeWidth="11"
               fill="transparent"
             />
@@ -87,17 +88,17 @@ export default function ScoreGauge({ overallScore, originalityScore, summary, ai
             <span className={`text-4xl font-black ${theme.textColor} leading-none tracking-tight`}>
               {overallScore}%
             </span>
-            <span className="text-[10px] uppercase font-bold text-slate-400 mt-1">Plagiarized</span>
+            <span className="text-[10px] uppercase font-bold text-slate-400 dark:text-slate-500 mt-1">Plagiarized</span>
           </div>
         </div>
 
         {/* Counter Badge */}
         <div className="flex flex-col gap-2.5 text-center">
-          <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3 shadow-sm">
-            <div className="text-2xl font-black text-emerald-700 leading-none">
+          <div className="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/80 rounded-2xl px-4 py-3 shadow-sm">
+            <div className="text-2xl font-black text-emerald-700 dark:text-emerald-300 leading-none">
               {originalityScore}%
             </div>
-            <div className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider mt-1">
+            <div className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider mt-1">
               Originality Score
             </div>
           </div>
@@ -106,18 +107,18 @@ export default function ScoreGauge({ overallScore, originalityScore, summary, ai
 
       {/* Match Classification Summary */}
       {summary && (
-        <div className="grid grid-cols-3 gap-2 pt-4 border-t border-slate-100 text-center text-xs">
-          <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-            <div className="text-base font-extrabold text-rose-600">{summary.exact_matches_count || 0}</div>
-            <div className="text-[10px] font-semibold text-slate-500 uppercase mt-0.5">Exact Match</div>
+        <div className="grid grid-cols-3 gap-2 pt-4 border-t border-slate-100 dark:border-slate-800 text-center text-xs">
+          <div className="bg-slate-50 dark:bg-slate-800/60 p-2.5 rounded-2xl border border-slate-100 dark:border-slate-800">
+            <div className="text-base font-extrabold text-rose-600 dark:text-rose-400">{summary.exact_matches_count || 0}</div>
+            <div className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase mt-0.5">Exact Match</div>
           </div>
-          <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-            <div className="text-base font-extrabold text-amber-600">{summary.paraphrase_matches_count || 0}</div>
-            <div className="text-[10px] font-semibold text-slate-500 uppercase mt-0.5">Paraphrased</div>
+          <div className="bg-slate-50 dark:bg-slate-800/60 p-2.5 rounded-2xl border border-slate-100 dark:border-slate-800">
+            <div className="text-base font-extrabold text-amber-600 dark:text-amber-400">{summary.paraphrase_matches_count || 0}</div>
+            <div className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase mt-0.5">Paraphrased</div>
           </div>
-          <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-            <div className="text-base font-extrabold text-blue-600">{summary.internet_matches_count || 0}</div>
-            <div className="text-[10px] font-semibold text-slate-500 uppercase mt-0.5">Web Sources</div>
+          <div className="bg-slate-50 dark:bg-slate-800/60 p-2.5 rounded-2xl border border-slate-100 dark:border-slate-800">
+            <div className="text-base font-extrabold text-blue-600 dark:text-blue-400">{summary.internet_matches_count || 0}</div>
+            <div className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase mt-0.5">Web Sources</div>
           </div>
         </div>
       )}

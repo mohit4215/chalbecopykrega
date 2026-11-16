@@ -4,6 +4,7 @@ import { ThemeProvider } from './context/ThemeContext';
 import { ToastProvider, useToast } from './components/ui/toast';
 import { ShieldCheck, X, Code2 } from 'lucide-react';
 
+import ErrorBoundary from './components/ErrorBoundary';
 import AppShell from './components/layout/AppShell';
 import UploadComponent from './components/UploadComponent';
 import ScoreGauge from './components/ScoreGauge';
@@ -371,14 +372,16 @@ function MainApp() {
 
 export default function App() {
   return (
-    <ThemeProvider>
-      <ToastProvider>
-        <AuthProvider>
-          <MainApp />
-          <CookieConsent />
-          <SupportChatWidget />
-        </AuthProvider>
-      </ToastProvider>
-    </ThemeProvider>
+    <ErrorBoundary>
+      <ThemeProvider>
+        <ToastProvider>
+          <AuthProvider>
+            <MainApp />
+            <CookieConsent />
+            <SupportChatWidget />
+          </AuthProvider>
+        </ToastProvider>
+      </ThemeProvider>
+    </ErrorBoundary>
   );
 }
