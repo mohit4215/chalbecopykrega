@@ -148,7 +148,7 @@ class AcademicDataHarvester:
         }
 
         try:
-            async with httpx.AsyncClient(timeout=timeout) as client:
+            async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
                 resp = await client.get(url, headers=headers)
                 if resp.status_code == 200:
                     data = resp.json()
@@ -207,7 +207,7 @@ class AcademicDataHarvester:
         encoded_query = urllib.parse.quote(clean_topic)
 
         url = (
-            f"http://export.arxiv.org/api/query"
+            f"https://export.arxiv.org/api/query"
             f"?search_query=all:{encoded_query}"
             f"&start=0"
             f"&max_results={min(25, max(1, limit))}"
@@ -215,7 +215,7 @@ class AcademicDataHarvester:
         )
 
         try:
-            async with httpx.AsyncClient(timeout=timeout) as client:
+            async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
                 resp = await client.get(url)
                 if resp.status_code == 200:
                     root = ET.fromstring(resp.text)
@@ -284,7 +284,7 @@ class AcademicDataHarvester:
             headers["x-api-key"] = api_key.strip()
 
         try:
-            async with httpx.AsyncClient(timeout=timeout) as client:
+            async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
                 resp = await client.get(url, headers=headers)
                 if resp.status_code == 200:
                     data = resp.json()
@@ -354,7 +354,7 @@ class AcademicDataHarvester:
         }
 
         try:
-            async with httpx.AsyncClient(timeout=timeout) as client:
+            async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
                 resp = await client.get(url, headers=headers)
                 if resp.status_code == 200:
                     data = resp.json()
