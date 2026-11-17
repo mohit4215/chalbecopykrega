@@ -209,7 +209,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.stripe.com https://cdn.tailwindcss.com",
             "style-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com",
             "font-src 'self' data: https:",
-            "connect-src 'self' https: wss:",
+            "connect-src 'self' https: wss: ws: http://localhost:* http://127.0.0.1:* ws://localhost:* ws://127.0.0.1:*",
             "frame-src 'self' https://js.stripe.com https://hooks.stripe.com",
             "frame-ancestors 'none'",
             "base-uri 'self'",

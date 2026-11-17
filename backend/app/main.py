@@ -187,7 +187,7 @@ app = FastAPI(
 
 raw_origins = os.getenv(
     "CORS_ORIGINS",
-    "http://localhost:3000,http://localhost:5173,http://localhost:5174,http://127.0.0.1:3000,http://127.0.0.1:5173,https://chalbecopykrega-app.onrender.com"
+    "http://localhost:8000,http://127.0.0.1:8000,http://localhost:3000,http://localhost:5173,http://localhost:5174,http://127.0.0.1:3000,http://127.0.0.1:5173,https://chalbecopykrega-app.onrender.com"
 )
 allowed_origins = [o.strip() for o in raw_origins.split(",") if o.strip()]
 
@@ -2180,6 +2180,9 @@ async def health_check():
 
 # Static files mount & root redirect fallback
 static_dist_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../frontend/dist"))
+if not os.path.isdir(static_dist_path):
+    static_dist_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../dist"))
+
 if os.path.isdir(static_dist_path):
     from fastapi.staticfiles import StaticFiles
     app.mount("/", StaticFiles(directory=static_dist_path, html=True), name="static")

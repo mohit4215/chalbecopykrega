@@ -49,15 +49,21 @@ export function AuthProvider({ children }) {
   const apiBase = (() => {
     if (typeof window !== 'undefined') {
       const hostname = window.location.hostname;
-      // If no explicit VITE_API_URL is configured and running on localhost:
-      if (!import.meta.env.VITE_API_URL && (hostname === 'localhost' || hostname === '127.0.0.1')) {
-        if (window.location.port === '8000') {
-          return ''; // Served directly by FastAPI
-        }
-        return 'http://127.0.0.1:8000'; // Vite dev server proxying to local backend
+      // 1. If served directly by FastAPI (port 8000 or same-origin without port), always use relative URL
+      if (window.location.port === '8000' || !window.location.port) {
+        return '';
+      }
+      // 2. If running on Vite dev server (port 5173 or other local port), target port 8000 on the same host
+      if (hostname === 'localhost' || hostname === '127.0.0.1') {
+        return `${window.location.protocol}//${hostname}:8000`;
+      }
+      // 3. Render production deployment
+      if (hostname.includes('render.com')) {
+        return 'https://chalbecopykrega-api.onrender.com';
       }
     }
-    let raw = (import.meta.env.VITE_API_URL || 'https://chalbecopykrega-api.onrender.com').trim();
+    let raw = (import.meta.env.VITE_API_URL || '').trim();
+    if (!raw) return '';
     if (!raw.startsWith('http://') && !raw.startsWith('https://')) {
       raw = `https://${raw}`;
     }
@@ -65,7 +71,8 @@ export function AuthProvider({ children }) {
   })();
 
   const register = async (email, password) => {
-    const res = await fetch(`${apiBase}/api/register`, {
+    const targetUrl = apiBase ? `${apiBase}/api/register` : '/api/register';
+    const res = await fetch(targetUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password }),
@@ -83,9 +90,10 @@ export function AuthProvider({ children }) {
   };
 
   const login = async (email, password) => {
-    console.log(`[Auth] Attempting login to ${apiBase}/api/login for:`, email);
+    const targetUrl = apiBase ? `${apiBase}/api/login` : '/api/login';
+    console.log(`[Auth] Attempting login to ${targetUrl} for:`, email);
     try {
-      const res = await fetch(`${apiBase}/api/login`, {
+      const res = await fetch(targetUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
@@ -132,7 +140,7 @@ export function AuthProvider({ children }) {
     const cleanUrl = url.startsWith('/') ? url : `/${url}`;
     const fullUrl = (url.startsWith('http://') || url.startsWith('https://'))
       ? url
-      : `${apiBase}${cleanUrl}`;
+      : (apiBase ? `${apiBase}${cleanUrl}` : cleanUrl);
 
     const res = await fetch(fullUrl, { ...options, headers });
     if (res.status === 401 && activeToken) {
