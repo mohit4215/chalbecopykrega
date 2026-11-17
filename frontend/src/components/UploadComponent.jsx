@@ -160,8 +160,12 @@ export default function UploadComponent({ onScanComplete, isLoading, setIsLoadin
     setIsWsActive(true);
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const rawEnv = (import.meta.env.VITE_API_URL || '').replace(/^https?:\/\//, '').replace(/\/+$/, '');
-    const host = rawEnv || (window.location.hostname.includes('render.com') ? 'chalbecopykrega-api.onrender.com' : window.location.host);
+    let host = window.location.host;
+    if (window.location.hostname.includes('render.com')) {
+      host = 'chalbecopykrega-api.onrender.com';
+    } else if (window.location.port === '5173') {
+      host = `${window.location.hostname}:8000`;
+    }
 
     const tokenQuery = token ? `?token=${encodeURIComponent(token)}` : '';
     const wsUrl = `${protocol}//${host}/ws/task-status/${taskId}${tokenQuery}`;
