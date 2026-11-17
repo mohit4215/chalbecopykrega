@@ -1,7 +1,24 @@
 import io
 import html
+import base64
+from pathlib import Path
 from datetime import datetime
 from typing import Dict, Any, List
+
+def _get_logo_b64() -> str:
+    candidates = [
+        Path(__file__).resolve().parent.parent.parent.parent / "logo.jpg",
+        Path(__file__).resolve().parent.parent.parent / "frontend" / "public" / "logo.jpg",
+        Path("logo.jpg"),
+    ]
+    for p in candidates:
+        if p.exists():
+            try:
+                with open(p, "rb") as f:
+                    return base64.b64encode(f.read()).decode("utf-8")
+            except Exception:
+                pass
+    return ""
 
 class PDFReportGenerator:
     """
@@ -100,6 +117,9 @@ class PDFReportGenerator:
         esl_active = bool(report_data.get("esl_mode") or ai_data.get("esl_shield_applied"))
         ephemeral_active = bool(report_data.get("ephemeral_mode") or report_data.get("zero_retention_guaranteed"))
         code_analysis = report_data.get("code_analysis")
+
+        logo_b64 = _get_logo_b64()
+        logo_td = f'<td style="width: 52px; vertical-align: middle; padding-right: 12px;"><img src="data:image/jpeg;base64,{logo_b64}" style="width: 44px; height: 44px; border-radius: 8px; display: block;" /></td>' if logo_b64 else ''
 
         # Color theme based on score severity
         if overall_score < 20:
@@ -306,11 +326,12 @@ class PDFReportGenerator:
             <div class="header-card">
                 <table style="width: 100%;">
                     <tr>
-                        <td>
+                        {logo_td}
+                        <td style="vertical-align: middle;">
                             <div class="title">Poach</div>
-                            <div class="sub-title">Academic Integrity & Plagiarism Audit Report</div>
+                            <div class="sub-title">Academic Originality Engine • Verification Audit</div>
                         </td>
-                        <td style="text-align: right;">
+                        <td style="text-align: right; vertical-align: middle;">
                             <span style="font-size: 10px; color: #64748b;">Report ID: <strong>{html.escape(scan_id[:8])}</strong></span><br/>
                             <span style="font-size: 10px; color: #64748b;">Generated: <strong>{scan_date}</strong></span>
                         </td>
