@@ -541,12 +541,21 @@ export default function UploadComponent({ onScanComplete, isLoading, setIsLoadin
           >
             {/* Massive Dashed Drag-and-Drop Zone */}
             <div id="tour-upload-box">
-              <div
+              <motion.div
                 {...getRootProps()}
+                animate={{
+                  scale: isDragActive ? 1.012 : 1,
+                }}
+                transition={{
+                  type: 'spring',
+                  stiffness: 420,
+                  damping: 26,
+                  mass: 0.8,
+                }}
                 className={cn(
-                  'border-2 border-dashed rounded-xl p-9 sm:p-12 text-center transition-all cursor-pointer relative select-none',
+                  'border-2 border-dashed rounded-xl p-9 sm:p-12 text-center transition-colors cursor-pointer relative select-none',
                   isDragActive
-                    ? 'border-indigo-500 bg-indigo-50/20 dark:bg-indigo-950/20 ring-4 ring-indigo-500/10'
+                    ? 'border-indigo-500 bg-indigo-50/30 dark:bg-indigo-950/30 ring-4 ring-indigo-500/20 shadow-lg shadow-indigo-500/10'
                     : file
                     ? 'border-emerald-400 bg-emerald-50/20 dark:border-emerald-800 dark:bg-emerald-950/10'
                     : 'border-zinc-300 bg-zinc-50/50 hover:bg-zinc-100/60 dark:border-zinc-700 dark:bg-zinc-900/40 dark:hover:bg-zinc-900/80 hover:border-zinc-400 dark:hover:border-zinc-600'
@@ -595,7 +604,7 @@ export default function UploadComponent({ onScanComplete, isLoading, setIsLoadin
                     </div>
                   </div>
                 )}
-              </div>
+              </motion.div>
             </div>
 
             {/* Distinct Physical-looking Toggle Switch: Zero-Knowledge Ephemeral Mode */}
