@@ -1,10 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { 
   X, 
-  ExternalLink, 
   GitCompare, 
   Flag, 
-  Quote, 
   Sparkles, 
   RefreshCw, 
   CheckCircle2, 
@@ -70,40 +68,40 @@ export default function DiffModal({ match, isOpen, onClose, onFlagMatch, onOpenC
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="bg-white dark:bg-[#0d121f] rounded-xl shadow-lg border border-slate-200 dark:border-slate-800 max-w-4xl w-full max-h-[88vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+    <div className="fixed inset-0 z-50 bg-zinc-950/60 backdrop-blur-sm flex items-center justify-center p-4">
+      <div className="bg-white dark:bg-zinc-900 rounded-xl shadow-2xl border border-zinc-200 dark:border-zinc-800 max-w-4xl w-full max-h-[88vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
         {/* Modal Header */}
-        <div className="px-5 py-3.5 border-b border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/60 flex items-center justify-between">
+        <div className="px-5 py-3.5 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/70 dark:bg-zinc-900/60 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="p-1.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-lg">
+            <div className="p-1.5 bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 rounded-lg">
               <GitCompare className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
-                {activeTab === 'diff' ? 'Side-by-Side Source Comparison' : 'Interactive Remediation Sandbox'}
+              <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
+                {activeTab === 'diff' ? 'Side-by-Side Source Comparison' : 'Student Remediation Sandbox'}
               </h3>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                Source: <span className="font-medium text-slate-700 dark:text-slate-300">{match.source_title}</span> • Category: <span className="font-mono">{match.source_category}</span>
+              <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                Source: <span className="font-semibold text-zinc-700 dark:text-zinc-300">{match.source_title}</span> • Category: <span className="font-mono">{match.source_category}</span>
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg transition"
+            className="p-1 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 rounded-lg transition"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
         {/* Tab Navigation */}
-        <div className="flex items-center gap-2 px-5 pt-2 bg-slate-50/30 dark:bg-slate-900/30 border-b border-slate-200 dark:border-slate-800">
+        <div className="flex items-center gap-2 px-5 pt-2 bg-zinc-50/30 dark:bg-zinc-900/30 border-b border-zinc-200 dark:border-zinc-800">
           <button
             type="button"
             onClick={() => setActiveTab('diff')}
             className={`px-3 py-1.5 text-xs font-semibold rounded-t-lg transition flex items-center gap-1.5 border-b-2 ${
               activeTab === 'diff'
-                ? 'border-slate-900 text-slate-900 dark:border-slate-100 dark:text-slate-100 bg-white dark:bg-slate-800'
-                : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                ? 'border-zinc-900 text-zinc-900 dark:border-zinc-100 dark:text-zinc-100 bg-white dark:bg-zinc-800'
+                : 'border-transparent text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200'
             }`}
           >
             <GitCompare className="w-3.5 h-3.5" />
@@ -114,13 +112,13 @@ export default function DiffModal({ match, isOpen, onClose, onFlagMatch, onOpenC
             onClick={() => setActiveTab('remediation')}
             className={`px-3 py-1.5 text-xs font-semibold rounded-t-lg transition flex items-center gap-1.5 border-b-2 ${
               activeTab === 'remediation'
-                ? 'border-slate-900 text-slate-900 dark:border-slate-100 dark:text-slate-100 bg-white dark:bg-slate-800'
-                : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                ? 'border-zinc-900 text-zinc-900 dark:border-zinc-100 dark:text-zinc-100 bg-white dark:bg-zinc-800'
+                : 'border-transparent text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200'
             }`}
           >
             <Sparkles className="w-4 h-4 text-amber-500" />
             <span>Student Remediation Sandbox</span>
-            <span className="text-[10px] uppercase font-black px-1.5 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950/80 text-amber-700 dark:text-amber-400 ml-1">
+            <span className="text-[10px] uppercase font-mono font-bold px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-700 dark:text-amber-400 ml-1">
               Live Re-check
             </span>
           </button>
@@ -129,37 +127,37 @@ export default function DiffModal({ match, isOpen, onClose, onFlagMatch, onOpenC
         {/* Tab Content Panes */}
         {activeTab === 'diff' ? (
           /* Dual Panes: Diff Mode */
-          <div className="p-6 overflow-y-auto flex-1 grid grid-cols-1 md:grid-cols-2 gap-6 bg-slate-50/40 dark:bg-slate-950/40">
+          <div className="p-6 overflow-y-auto flex-1 grid grid-cols-1 md:grid-cols-2 gap-6 bg-zinc-50/40 dark:bg-zinc-950/40">
             {/* Left: Uploaded text */}
-            <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col">
-              <div className="flex items-center justify-between pb-3 mb-3 border-b border-slate-100 dark:border-slate-700/60">
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+            <div className="bg-white dark:bg-zinc-900 p-5 rounded-xl border border-zinc-200 dark:border-zinc-800 shadow-2xs flex flex-col">
+              <div className="flex items-center justify-between pb-3 mb-3 border-b border-zinc-100 dark:border-zinc-800">
+                <span className="text-xs font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 font-mono">
                   Submitted Student Work
                 </span>
-                <span className="text-xs text-slate-400 font-mono">
+                <span className="text-xs text-zinc-400 font-mono tabular-nums">
                   Indices: [{match.start_index} - {match.end_index}]
                 </span>
               </div>
-              <div className="flex-1 bg-rose-50/60 dark:bg-rose-950/30 border border-rose-100 dark:border-rose-900/60 p-4 rounded-xl text-slate-800 dark:text-slate-200 text-sm font-serif leading-relaxed">
+              <div className="flex-1 bg-rose-500/10 border border-rose-500/20 p-4 rounded-lg text-zinc-900 dark:text-zinc-100 text-sm font-serif leading-relaxed">
                 {match.matched_text}
               </div>
             </div>
 
             {/* Right: Matched Source Snippet */}
-            <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col">
-              <div className="flex items-center justify-between pb-3 mb-3 border-b border-slate-100 dark:border-slate-700/60">
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+            <div className="bg-white dark:bg-zinc-900 p-5 rounded-xl border border-zinc-200 dark:border-zinc-800 shadow-2xs flex flex-col">
+              <div className="flex items-center justify-between pb-3 mb-3 border-b border-zinc-100 dark:border-zinc-800">
+                <span className="text-xs font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 font-mono">
                   Matched Reference Source
                 </span>
                 <div className="flex items-center gap-2">
-                  <span className="text-xs px-2.5 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 font-extrabold">
+                  <span className="text-xs px-2.5 py-0.5 rounded-full bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 font-bold font-mono">
                     {(match.similarity_score * 100).toFixed(0)}% Similarity
                   </span>
                   {onFlagMatch && (
                     <button
                       type="button"
                       onClick={() => onFlagMatch(match)}
-                      className="p-1 text-slate-400 hover:text-amber-600 dark:hover:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/60 rounded-lg transition"
+                      className="p-1 text-zinc-400 hover:text-amber-600 dark:hover:text-amber-400 hover:bg-amber-500/10 rounded-lg transition"
                       title="Flag as False Positive / Incorrect"
                     >
                       <Flag className="w-3.5 h-3.5" />
@@ -167,19 +165,19 @@ export default function DiffModal({ match, isOpen, onClose, onFlagMatch, onOpenC
                   )}
                 </div>
               </div>
-              <div className="flex-1 bg-blue-50/60 dark:bg-blue-950/30 border border-blue-100 dark:border-blue-900/60 p-4 rounded-xl text-slate-800 dark:text-slate-200 text-sm font-serif leading-relaxed">
+              <div className="flex-1 bg-indigo-500/10 border border-indigo-500/20 p-4 rounded-lg text-zinc-900 dark:text-zinc-100 text-sm font-serif leading-relaxed">
                 {match.source_snippet || match.matched_text}
               </div>
             </div>
           </div>
         ) : (
           /* Remediation Sandbox Mode */
-          <div className="p-6 overflow-y-auto flex-1 space-y-5 bg-slate-50/40 dark:bg-slate-950/40">
+          <div className="p-6 overflow-y-auto flex-1 space-y-5 bg-zinc-50/40 dark:bg-zinc-950/40">
             {/* Pedagogical Guidance Banner */}
-            <div className="p-4 rounded-2xl bg-indigo-50/80 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800/60 text-xs text-indigo-900 dark:text-indigo-200 flex items-start gap-3">
+            <div className="p-4 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-xs text-indigo-900 dark:text-indigo-200 flex items-start gap-3">
               <Sparkles className="w-5 h-5 text-indigo-600 dark:text-indigo-400 shrink-0 mt-0.5" />
               <div>
-                <p className="font-extrabold">Pedagogical Learning Sandbox vs. Turnitin Punitive Flagging</p>
+                <p className="font-bold">Pedagogical Learning Sandbox vs. Turnitin Punitive Flagging</p>
                 <p className="text-indigo-700 dark:text-indigo-300 mt-0.5 leading-relaxed">
                   Rewrite the flagged passage in your own words below. Poach instantly checks your paraphrase against the reference source in real-time, certifying when your overlap drops below academic thresholds.
                 </p>
@@ -189,35 +187,35 @@ export default function DiffModal({ match, isOpen, onClose, onFlagMatch, onOpenC
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* Left Column: Reference Target */}
               <div className="space-y-4">
-                <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block mb-2">
+                <div className="bg-white dark:bg-zinc-900 p-4 rounded-xl border border-zinc-200 dark:border-zinc-800 shadow-2xs">
+                  <span className="text-[11px] font-mono font-bold uppercase tracking-wider text-zinc-400 block mb-2">
                     Reference Source Text to Synthesize:
                   </span>
-                  <div className="p-3 bg-slate-50 dark:bg-slate-900/60 rounded-xl text-xs font-serif text-slate-700 dark:text-slate-300 leading-relaxed max-h-48 overflow-y-auto">
+                  <div className="p-3 bg-zinc-50 dark:bg-zinc-950 rounded-lg text-xs font-serif text-zinc-700 dark:text-zinc-300 leading-relaxed max-h-48 overflow-y-auto border border-zinc-200 dark:border-zinc-800">
                     {match.source_snippet || match.matched_text}
                   </div>
                 </div>
 
-                <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block mb-2">
+                <div className="bg-white dark:bg-zinc-900 p-4 rounded-xl border border-zinc-200 dark:border-zinc-800 shadow-2xs">
+                  <span className="text-[11px] font-mono font-bold uppercase tracking-wider text-zinc-400 block mb-2">
                     Originally Flagged Passage:
                   </span>
-                  <div className="p-3 bg-rose-50/70 dark:bg-rose-950/40 border border-rose-100 dark:border-rose-900/60 rounded-xl text-xs font-serif text-rose-900 dark:text-rose-200 leading-relaxed max-h-36 overflow-y-auto">
+                  <div className="p-3 bg-rose-500/10 border border-rose-500/20 rounded-lg text-xs font-serif text-rose-900 dark:text-rose-200 leading-relaxed max-h-36 overflow-y-auto">
                     {match.matched_text}
                   </div>
                 </div>
               </div>
 
               {/* Right Column: Live Paraphrase Workspace */}
-              <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col space-y-3">
+              <div className="bg-white dark:bg-zinc-900 p-5 rounded-xl border border-zinc-200 dark:border-zinc-800 shadow-2xs flex flex-col space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-200">
+                  <span className="text-xs font-bold uppercase tracking-wider text-zinc-700 dark:text-zinc-200 font-mono">
                     Your Rewritten Revision:
                   </span>
                   <button
                     type="button"
                     onClick={handleReset}
-                    className="text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 flex items-center gap-1 transition"
+                    className="text-xs text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 flex items-center gap-1 transition"
                     title="Reset to original text"
                   >
                     <RotateCcw className="w-3 h-3" /> Reset
@@ -229,16 +227,16 @@ export default function DiffModal({ match, isOpen, onClose, onFlagMatch, onOpenC
                   onChange={(e) => setRevisedText(e.target.value)}
                   placeholder="Synthesize the key points in your authentic academic voice..."
                   rows={6}
-                  className="w-full p-3.5 text-sm bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none resize-none font-serif text-slate-800 dark:text-slate-100 leading-relaxed"
+                  className="w-full p-3.5 text-sm bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 outline-none resize-none font-serif text-zinc-800 dark:text-zinc-100 leading-relaxed"
                 />
 
-                <div className="flex items-center justify-between text-xs text-slate-400">
-                  <span>{revisedText.trim() ? revisedText.trim().split(/\s+/).length : 0} words</span>
+                <div className="flex items-center justify-between text-xs text-zinc-400">
+                  <span className="font-mono tabular-nums">{revisedText.trim() ? revisedText.trim().split(/\s+/).length : 0} words</span>
                   <button
                     type="button"
                     onClick={handleEvaluate}
                     disabled={isEvaluating || !revisedText.trim()}
-                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 transition shadow-sm"
+                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-semibold rounded-lg text-xs flex items-center gap-1.5 transition shadow-2xs"
                   >
                     {isEvaluating ? (
                       <>
@@ -262,10 +260,10 @@ export default function DiffModal({ match, isOpen, onClose, onFlagMatch, onOpenC
                 {remediationResult && (
                   <div className={`mt-2 p-4 rounded-xl border animate-in fade-in duration-200 ${
                     remediationResult.remediation_success
-                      ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200'
+                      ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-900 dark:text-emerald-200'
                       : remediationResult.is_partial
-                      ? 'bg-amber-50 dark:bg-amber-950/40 border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200'
-                      : 'bg-rose-50 dark:bg-rose-950/40 border-rose-300 dark:border-rose-800 text-rose-900 dark:text-rose-200'
+                      ? 'bg-amber-500/10 border-amber-500/30 text-amber-900 dark:text-amber-200'
+                      : 'bg-rose-500/10 border-rose-500/30 text-rose-900 dark:text-rose-200'
                   }`}>
                     <div className="flex items-center justify-between pb-2 border-b border-current/15 mb-2">
                       <div className="flex items-center gap-1.5">
@@ -274,9 +272,9 @@ export default function DiffModal({ match, isOpen, onClose, onFlagMatch, onOpenC
                         ) : (
                           <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400" />
                         )}
-                        <span className="font-extrabold text-xs">{remediationResult.verdict}</span>
+                        <span className="font-bold text-xs">{remediationResult.verdict}</span>
                       </div>
-                      <div className="flex items-center gap-1.5 text-xs font-mono font-bold">
+                      <div className="flex items-center gap-1.5 text-xs font-mono font-bold tabular-nums">
                         <span>{remediationResult.initial_similarity}%</span>
                         <ArrowRight className="w-3 h-3" />
                         <span className="underline decoration-2">{remediationResult.revised_similarity}%</span>
@@ -290,7 +288,7 @@ export default function DiffModal({ match, isOpen, onClose, onFlagMatch, onOpenC
 
                     {/* Patchwriting Alert */}
                     {remediationResult.is_patchwriting && (
-                      <div className="mt-2.5 p-2.5 rounded-lg bg-amber-100 dark:bg-amber-900/60 border border-amber-300 dark:border-amber-700 text-[11px] text-amber-900 dark:text-amber-200">
+                      <div className="mt-2.5 p-2.5 rounded-lg bg-amber-500/15 border border-amber-500/30 text-[11px] text-amber-900 dark:text-amber-200">
                         <strong className="block font-bold">Academic Integrity Alert: Patchwriting</strong>
                         Sentence syntax and clause sequence closely mirror the reference source despite thesaurus substitution.
                       </div>
@@ -299,7 +297,7 @@ export default function DiffModal({ match, isOpen, onClose, onFlagMatch, onOpenC
                     {/* Word-by-Word Granular Token Diff */}
                     {remediationResult.token_diff?.length > 0 && (
                       <div className="mt-3 pt-2.5 border-t border-current/15 space-y-1.5">
-                        <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider">
+                        <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider font-mono">
                           <span>Syntactic Token Highlighting:</span>
                           <div className="flex items-center gap-2 text-[9px] font-semibold lowercase">
                             <span className="flex items-center gap-1">
@@ -313,16 +311,16 @@ export default function DiffModal({ match, isOpen, onClose, onFlagMatch, onOpenC
                             </span>
                           </div>
                         </div>
-                        <div className="p-2.5 bg-white/90 dark:bg-slate-900/90 rounded-lg border border-current/10 text-xs font-serif leading-relaxed flex flex-wrap gap-1">
+                        <div className="p-2.5 bg-white/90 dark:bg-zinc-950/90 rounded-lg border border-current/10 text-xs font-serif leading-relaxed flex flex-wrap gap-1">
                           {remediationResult.token_diff.map((item, tIdx) => (
                             <span
                               key={tIdx}
                               className={`px-1 py-0.5 rounded transition ${
                                 item.tag === 'verbatim'
-                                  ? 'bg-rose-100 text-rose-800 dark:bg-rose-950/80 dark:text-rose-300 font-bold'
+                                  ? 'bg-rose-500/20 text-rose-800 dark:text-rose-300 font-bold'
                                   : item.tag === 'quoted'
-                                  ? 'bg-purple-100 text-purple-800 dark:bg-purple-950/80 dark:text-purple-300 italic'
-                                  : 'text-slate-800 dark:text-slate-200'
+                                  ? 'bg-purple-500/20 text-purple-800 dark:text-purple-300 italic'
+                                  : 'text-zinc-800 dark:text-zinc-200'
                               }`}
                             >
                               {item.word}
@@ -334,7 +332,7 @@ export default function DiffModal({ match, isOpen, onClose, onFlagMatch, onOpenC
 
                     {remediationResult.remaining_verbatim_phrases?.length > 0 && (
                       <div className="mt-2 pt-2 border-t border-current/10 space-y-1">
-                        <span className="text-[10px] font-bold uppercase tracking-wider block">
+                        <span className="text-[10px] font-bold uppercase tracking-wider block font-mono">
                           Overlapping n-grams to rephrase:
                         </span>
                         <div className="flex flex-wrap gap-1">
@@ -354,11 +352,11 @@ export default function DiffModal({ match, isOpen, onClose, onFlagMatch, onOpenC
         )}
 
         {/* Modal Footer */}
-        <div className="px-6 py-4 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex items-center justify-between">
-          <div className="text-xs text-slate-500 dark:text-slate-400">
+        <div className="px-6 py-3.5 border-t border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex items-center justify-between">
+          <div className="text-xs text-zinc-500 dark:text-zinc-400 font-mono">
             Classification: <strong className="uppercase">{(match.match_type || 'direct_match').replace('_', ' ')}</strong>
           </div>
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2">
             {onOpenCite && (
               <button
                 type="button"
@@ -366,39 +364,17 @@ export default function DiffModal({ match, isOpen, onClose, onFlagMatch, onOpenC
                   onClose();
                   onOpenCite(match);
                 }}
-                className="px-3.5 py-2 bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 font-bold rounded-xl text-xs flex items-center gap-1.5 transition border border-emerald-200 dark:border-emerald-800 shadow-sm"
-                title="1-Click Smart Academic Citation"
+                className="px-3 py-1.5 border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-300 text-xs font-semibold rounded-lg transition"
               >
-                <Quote className="w-3.5 h-3.5" />
-                <span>1-Click Cite</span>
+                Open Citation Assistant
               </button>
-            )}
-            {onFlagMatch && (
-              <button
-                type="button"
-                onClick={() => onFlagMatch(match)}
-                className="px-3.5 py-2 bg-amber-50 dark:bg-amber-950/60 hover:bg-amber-100 dark:hover:bg-amber-900/60 text-amber-700 dark:text-amber-300 font-bold rounded-xl text-xs flex items-center gap-1.5 transition border border-amber-200 dark:border-amber-800 shadow-sm"
-                title="Flag this match as false positive or incorrect citation"
-              >
-                <Flag className="w-3.5 h-3.5" />
-                <span>Flag as Incorrect</span>
-              </button>
-            )}
-            {match.source_url && (
-              <a
-                href={match.source_url}
-                target="_blank"
-                rel="noreferrer"
-                className="px-4 py-2 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 font-bold rounded-xl text-xs flex items-center gap-1.5 transition"
-              >
-                Open Source URL <ExternalLink className="w-3.5 h-3.5" />
-              </a>
             )}
             <button
+              type="button"
               onClick={onClose}
-              className="px-5 py-2 bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 hover:bg-slate-800 dark:hover:bg-white font-bold rounded-xl text-xs transition"
+              className="px-4 py-1.5 bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 text-xs font-semibold rounded-lg transition"
             >
-              Done
+              Close
             </button>
           </div>
         </div>

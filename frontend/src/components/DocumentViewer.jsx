@@ -1,6 +1,7 @@
 import React, { useMemo, useEffect, useRef, useState, useCallback } from 'react';
 import { FileText, Quote, X, Filter } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { useUiStore } from '../store/useUiStore';
 
 /**
  * High-performance Document Originality Viewer (Screen B Left Column).
@@ -10,6 +11,7 @@ import { cn } from '../lib/utils';
  * - Medium-style floating "Generate APA/MLA Citation" popover on text selection
  * - Source-specific highlight filtering
  * - Bi-directional auto-scroll synchronization
+ * - 60fps Zustand micro-state hover tracking with Bezier curve connectors
  */
 export default function DocumentViewer({
   fullText,
@@ -23,6 +25,7 @@ export default function DocumentViewer({
   const containerRef = useRef(null);
   const [fontSize, setFontSize] = useState('base'); // 'sm' | 'base' | 'lg'
   const [selectionPopover, setSelectionPopover] = useState(null);
+  const activeHoverId = useUiStore((state) => state.activeHoverId);
 
   /**
    * Slices fullText into non-overlapping plain and highlighted segments
@@ -114,9 +117,8 @@ export default function DocumentViewer({
       const parentRect = containerRef.current?.getBoundingClientRect();
 
       if (rect && parentRect) {
-        // Calculate coordinate relative to container
         const left = rect.left - parentRect.left + rect.width / 2;
-        const top = rect.top - parentRect.top - 44; // Position just above selection
+        const top = rect.top - parentRect.top - 44;
 
         setSelectionPopover({
           text,
@@ -145,7 +147,23 @@ export default function DocumentViewer({
     }
   };
 
-  const getHighlightClass = (match, isSelected, isFilteredOut) => {
+  const handleHighlightMouseEnter = (match) => {
+    const highlightEl = document.getElementById(`highlight-${match.id}`);
+    const cardEl = document.getElementById(`source-card-${match.id}`);
+    if (highlightEl && cardEl) {
+      const hRect = highlightEl.getBoundingClientRect();
+      const cRect = cardEl.getBoundingClientRect();
+      useUiStore.getState().setActiveHover(match.id, hRect, cRect);
+    } else {
+      useUiStore.getState().setActiveHover(match.id);
+    }
+  };
+
+  const handleHighlightMouseLeave = () => {
+    useUiStore.getState().clearActiveHover();
+  };
+
+  const getHighlightClass = (match, isSelected, isHovered, isFilteredOut) => {
     if (isFilteredOut) {
       return 'opacity-25 grayscale hover:opacity-80 transition cursor-pointer px-1 py-0.5 rounded select-text';
     }
@@ -153,16 +171,16 @@ export default function DocumentViewer({
     let base = 'cursor-pointer rounded px-1.5 py-0.5 transition-all duration-150 inline select-text font-medium ';
 
     if (match.match_type === 'exact_copy' || match.similarity_score >= 0.92) {
-      base += isSelected
-        ? 'bg-rose-500/20 text-rose-800 dark:text-rose-200 ring-2 ring-rose-600 underline decoration-rose-600 '
+      base += isSelected || isHovered
+        ? 'bg-rose-500/25 text-rose-800 dark:text-rose-200 ring-2 ring-rose-600 underline decoration-rose-600 shadow-2xs '
         : 'bg-rose-500/10 text-rose-700 dark:text-rose-300 border-b-2 border-rose-500 hover:bg-rose-500/20 underline decoration-rose-500 ';
     } else if (match.match_type === 'paraphrase') {
-      base += isSelected
-        ? 'bg-amber-500/20 text-amber-900 dark:text-amber-200 ring-2 ring-amber-600 underline decoration-amber-600 '
+      base += isSelected || isHovered
+        ? 'bg-amber-500/25 text-amber-900 dark:text-amber-200 ring-2 ring-amber-600 underline decoration-amber-600 shadow-2xs '
         : 'bg-amber-500/10 text-amber-800 dark:text-amber-300 border-b-2 border-amber-500 hover:bg-amber-500/20 ';
     } else {
-      base += isSelected
-        ? 'bg-indigo-500/20 text-indigo-900 dark:text-indigo-200 ring-2 ring-indigo-600 underline decoration-indigo-600 '
+      base += isSelected || isHovered
+        ? 'bg-indigo-500/25 text-indigo-900 dark:text-indigo-200 ring-2 ring-indigo-600 underline decoration-indigo-600 shadow-2xs '
         : 'bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border-b-2 border-indigo-500 hover:bg-indigo-500/20 ';
     }
 
@@ -281,6 +299,7 @@ export default function DocumentViewer({
       <div
         ref={containerRef}
         onMouseUp={handleMouseUp}
+        onScroll={() => useUiStore.getState().clearActiveHover()}
         className="relative flex-1 overflow-y-auto p-6 sm:p-10 font-serif text-zinc-800 dark:text-zinc-200 select-text"
       >
         {/* Floating Medium-style Citation Assistant Popover */}
@@ -322,6 +341,7 @@ export default function DocumentViewer({
             }
 
             const isSelected = selectedMatchId === seg.match.id;
+            const isHovered = activeHoverId === seg.match.id;
             const isFilteredOut = Boolean(
               filterSourceId &&
               seg.match.id !== filterSourceId &&
@@ -333,7 +353,9 @@ export default function DocumentViewer({
                 key={seg.key}
                 id={`highlight-${seg.match.id}`}
                 onClick={() => handleHighlightClick(seg.match)}
-                className={getHighlightClass(seg.match, isSelected, isFilteredOut)}
+                onMouseEnter={() => handleHighlightMouseEnter(seg.match)}
+                onMouseLeave={handleHighlightMouseLeave}
+                className={getHighlightClass(seg.match, isSelected, isHovered, isFilteredOut)}
                 title={`Click to inspect matching source: ${seg.match.source_title} (${(seg.match.similarity_score * 100).toFixed(0)}% match)`}
               >
                 {seg.text}

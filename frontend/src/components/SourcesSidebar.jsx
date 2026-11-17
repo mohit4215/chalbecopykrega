@@ -12,6 +12,7 @@ import {
   Filter
 } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { useUiStore } from '../store/useUiStore';
 
 export default function SourcesSidebar({
   matches = [],
@@ -23,6 +24,8 @@ export default function SourcesSidebar({
   onOpenCite,
   onFilterBySource,
 }) {
+  const activeHoverId = useUiStore((state) => state.activeHoverId);
+
   const getDomainName = (url) => {
     if (!url) return null;
     try {
@@ -117,6 +120,22 @@ export default function SourcesSidebar({
     }
   };
 
+  const handleCardMouseEnter = (m) => {
+    const cardEl = document.getElementById(`source-card-${m.id}`);
+    const highlightEl = document.getElementById(`highlight-${m.id}`);
+    if (cardEl && highlightEl) {
+      const cRect = cardEl.getBoundingClientRect();
+      const hRect = highlightEl.getBoundingClientRect();
+      useUiStore.getState().setActiveHover(m.id, hRect, cRect);
+    } else {
+      useUiStore.getState().setActiveHover(m.id);
+    }
+  };
+
+  const handleCardMouseLeave = () => {
+    useUiStore.getState().clearActiveHover();
+  };
+
   if (!matches || matches.length === 0) {
     return (
       <div className="bg-white dark:bg-zinc-900 rounded-xl p-8 border border-zinc-200 dark:border-zinc-800 text-center shadow-2xs">
@@ -152,6 +171,7 @@ export default function SourcesSidebar({
       <div className="flex-1 overflow-y-auto p-2.5 space-y-2">
         {matches.map((m, idx) => {
           const isSelected = selectedMatchId === m.id;
+          const isHovered = activeHoverId === m.id;
           const isFiltered = filterSourceId === m.id || filterSourceId === m.source_id;
           const scorePercent = (m.similarity_score * 100).toFixed(0);
           const domain = getDomainName(m.source_url);
@@ -161,9 +181,13 @@ export default function SourcesSidebar({
               key={m.id || idx}
               id={`source-card-${m.id}`}
               onClick={() => handleCardClick(m)}
+              onMouseEnter={() => handleCardMouseEnter(m)}
+              onMouseLeave={handleCardMouseLeave}
               className={cn(
-                'p-3 rounded-lg cursor-pointer transition-all border select-none',
-                isSelected || isFiltered
+                'p-3 rounded-lg cursor-pointer transition-all duration-150 border select-none',
+                isHovered
+                  ? 'bg-zinc-50 dark:bg-zinc-800/90 border-indigo-500 ring-2 ring-indigo-500/50 shadow-sm'
+                  : isSelected || isFiltered
                   ? 'bg-zinc-50 dark:bg-zinc-800/80 border-zinc-900 dark:border-zinc-200 ring-1 ring-zinc-900 dark:ring-zinc-200'
                   : 'bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700'
               )}

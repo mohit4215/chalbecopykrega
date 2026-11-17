@@ -20,7 +20,8 @@
     "react-dom": "^18.2.0",
     "react-dropzone": "^14.2.3",
     "react-joyride": "^2.8.2",
-    "tailwind-merge": "^2.2.1"
+    "tailwind-merge": "^2.2.1",
+    "zustand": "^5.1.0"
   },
   "devDependencies": {
     "@babel/core": "^7.24.0",
