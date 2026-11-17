@@ -66,6 +66,11 @@ export default function OriginalityCertificateModal({ report, isOpen, onClose })
 
             {/* Certificate Header */}
             <div className="text-center pb-4 border-b border-slate-200 dark:border-slate-800">
+              <div className="flex justify-center mb-2.5">
+                <div className="w-12 h-12 rounded-xl overflow-hidden bg-zinc-950 border border-zinc-800 shadow-sm">
+                  <img src="/logo.jpg" alt="Poach Shield Emblem" className="w-full h-full object-cover" />
+                </div>
+              </div>
               <span className="text-[10px] uppercase font-mono tracking-widest text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2.5 py-0.5 rounded border border-slate-200 dark:border-slate-700">
                 Poach Academic Integrity Protocol
               </span>

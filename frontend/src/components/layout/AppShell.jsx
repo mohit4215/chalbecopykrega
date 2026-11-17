@@ -13,7 +13,6 @@ import {
   X, 
   ChevronLeft, 
   ChevronRight, 
-  ShieldCheck,
   Code2,
   Database,
   Users,
@@ -92,18 +91,18 @@ export default function AppShell({
             onClick={() => onTabChange(report ? 'report' : 'scan')}
             className="flex items-center gap-2.5 cursor-pointer select-none group"
           >
-            <div className="w-8 h-8 rounded-lg bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 flex items-center justify-center font-bold">
-              <ShieldCheck className="w-4 h-4 text-emerald-400 dark:text-emerald-600" />
+            <div className="w-8 h-8 rounded-lg overflow-hidden flex items-center justify-center bg-zinc-950 border border-zinc-800 shadow-2xs group-hover:scale-105 transition-transform shrink-0">
+              <img src="/logo.jpg" alt="Poach Logo" className="w-full h-full object-cover" />
             </div>
             <div>
               <div className="flex items-center gap-1.5">
                 <span className="text-sm font-bold tracking-tight text-slate-900 dark:text-white">Poach</span>
                 <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold uppercase tracking-wider bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
-                  Audit Engine
+                  Originality Engine
                 </span>
               </div>
               <p className="hidden sm:block text-[10px] text-slate-400 dark:text-slate-500 font-normal">
-                Originality & Academic Integrity
+                Academic Originality Engine
               </p>
             </div>
           </div>
@@ -292,8 +291,10 @@ export default function AppShell({
               <div className="space-y-3">
                 <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
                   <div className="flex items-center gap-2">
-                    <ShieldCheck className="w-4 h-4 text-slate-900 dark:text-slate-100" />
-                    <span className="font-bold text-sm text-slate-900 dark:text-white">Navigation</span>
+                    <div className="w-6 h-6 rounded-md overflow-hidden bg-zinc-950 border border-zinc-800 shrink-0">
+                      <img src="/logo.jpg" alt="Poach Logo" className="w-full h-full object-cover" />
+                    </div>
+                    <span className="font-bold text-sm text-slate-900 dark:text-white">Poach Navigation</span>
                   </div>
                   <button
                     type="button"

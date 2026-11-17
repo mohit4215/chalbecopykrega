@@ -1,3 +1,8 @@
+<div align="center">
+  <img src="logo.jpg" alt="Poach Academic Originality Engine" width="380" style="border-radius: 14px; margin-bottom: 12px;" />
+  <p><strong>ACADEMIC ORIGINALITY ENGINE & VERIFICATION PROTOCOL</strong></p>
+</div>
+
 # Poach | Enterprise Academic Originality & Plagiarism Verification Engine
 
 [![Production Build](https://img.shields.io/badge/Build-Passing-emerald?style=flat-square)](https://github.com/mohit4215/chalbecopykrega)
