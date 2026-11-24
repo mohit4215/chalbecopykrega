@@ -437,6 +437,7 @@ def process_plagiarism_document(
             },
             "matches": formatted_matches,
             "ai_detection": ai_analysis,
+            "ai_analysis": ai_analysis,
             "citation_exclusions": citation_filter_result["filters_applied"]
         }
 

@@ -14,6 +14,8 @@ import json
 import logging
 from importlib.util import find_spec
 from typing import List, Dict, Any, Optional, Tuple, Set
+import asyncio
+import urllib.parse
 import numpy as np
 import httpx
 
@@ -131,36 +133,103 @@ class LiveWebSearchClient:
             logger.warning(f"Bing Search API query error for '{query}': {e}")
         return []
 
-    async def search_fallback_open(self, query: str, top_k: int = 3) -> List[Dict[str, str]]:
-        """
-        Zero-configuration public fallback (DuckDuckGo JSON API) used when no commercial
-        API keys are configured. Ensures production pipeline never fails out-of-the-box.
-        """
-        clean_q = query.replace('"', '')
-        url = f"https://api.duckduckgo.com/?q={clean_q}&format=json"
+    async def search_wikipedia(self, query: str, top_k: int = 2) -> List[Dict[str, str]]:
+        """Queries Wikipedia Search API for encyclopedic concept cross-referencing."""
+        clean_q = " ".join(re.sub(r"[^\w\s]", " ", query).split()[:8])
+        if not clean_q:
+            return []
+        url = "https://en.wikipedia.org/w/api.php"
+        params = {
+            "action": "query",
+            "list": "search",
+            "srsearch": clean_q,
+            "format": "json",
+            "utf8": 1,
+            "srlimit": top_k
+        }
+        headers = {"User-Agent": "PoachAcademicIntegrity/1.0 (mailto:academic-audit@poach.ai)"}
         try:
-            async with httpx.AsyncClient(timeout=2.5) as client:
-                resp = await client.get(url)
+            async with httpx.AsyncClient(timeout=4.0, follow_redirects=True) as client:
+                resp = await client.get(url, params=params, headers=headers)
                 if resp.status_code == 200:
                     data = resp.json()
+                    search_res = data.get("query", {}).get("search", [])
                     results = []
-                    if data.get("AbstractText"):
-                        results.append({
-                            "title": data.get("Heading", "Wikipedia / Knowledge Base"),
-                            "url": data.get("AbstractURL", "https://duckduckgo.com"),
-                            "snippet": data.get("AbstractText", "")
-                        })
-                    for topic in data.get("RelatedTopics", [])[:top_k]:
-                        if "Text" in topic and "FirstURL" in topic:
+                    for item in search_res:
+                        raw_snip = item.get("snippet", "")
+                        clean_snip = re.sub(r"<[^>]+>", " ", raw_snip).strip()
+                        title = item.get("title", "Wikipedia")
+                        if clean_snip:
                             results.append({
-                                "title": topic.get("Text")[:60] + "...",
-                                "url": topic.get("FirstURL"),
-                                "snippet": topic.get("Text")
+                                "title": f"Wikipedia: {title}",
+                                "url": f"https://en.wikipedia.org/wiki/{urllib.parse.quote(title)}",
+                                "snippet": clean_snip,
+                                "source_category": "Internet Encyclopedia"
                             })
                     return results
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Wikipedia API lookup skipped: {e}")
         return []
+
+    async def search_openalex(self, query: str, top_k: int = 2) -> List[Dict[str, str]]:
+        """Queries OpenAlex for scholarly publications and peer-reviewed abstracts."""
+        try:
+            from app.services.data_harvester import AcademicDataHarvester
+            clean_q = " ".join(re.sub(r"[^\w\s]", " ", query).split()[:7])
+            if not clean_q:
+                return []
+            works = await AcademicDataHarvester.harvest_openalex(clean_q, limit=top_k, timeout=4.0)
+            results = []
+            for w in works:
+                results.append({
+                    "title": w.get("title", "Academic Publication"),
+                    "url": w.get("source_url") or "https://openalex.org",
+                    "snippet": w.get("full_text", "")[:350],
+                    "source_category": "Academic Literature (OpenAlex)"
+                })
+            return results
+        except Exception as e:
+            logger.debug(f"OpenAlex lookup skipped: {e}")
+        return []
+
+    async def search_arxiv(self, query: str, top_k: int = 1) -> List[Dict[str, str]]:
+        """Queries arXiv for STEM, CS, and AI preprints."""
+        try:
+            from app.services.data_harvester import AcademicDataHarvester
+            clean_q = " ".join(re.sub(r"[^\w\s]", " ", query).split()[:7])
+            if not clean_q:
+                return []
+            works = await AcademicDataHarvester.harvest_arxiv(clean_q, limit=top_k, timeout=4.0)
+            results = []
+            for w in works:
+                results.append({
+                    "title": w.get("title", "arXiv STEM Preprint"),
+                    "url": w.get("source_url") or "https://arxiv.org",
+                    "snippet": w.get("full_text", "")[:350],
+                    "source_category": "arXiv STEM Preprint"
+                })
+            return results
+        except Exception as e:
+            logger.debug(f"arXiv lookup skipped: {e}")
+        return []
+
+    async def search_fallback_open(self, query: str, top_k: int = 3) -> List[Dict[str, str]]:
+        """
+        Multi-source open academic & web search fallback.
+        Queries Wikipedia, OpenAlex (250M+ scholarly works), and arXiv preprints in parallel.
+        Ensures research manuscripts are verified against global scholarly literature out-of-the-box.
+        """
+        tasks = [
+            self.search_wikipedia(query, top_k=2),
+            self.search_openalex(query, top_k=2),
+            self.search_arxiv(query, top_k=1)
+        ]
+        gathered = await asyncio.gather(*tasks, return_exceptions=True)
+        results = []
+        for g in gathered:
+            if isinstance(g, list):
+                results.extend(g)
+        return results[:top_k * 2]
 
     async def query_web_for_chunk(self, chunk_text: str, top_k: int = 3) -> List[Dict[str, str]]:
         """
@@ -408,7 +477,7 @@ class InternalVectorDB:
         self._fallback_store = [item for item in self._fallback_store if item.get("document_id") != document_id]
         return before_count - len(self._fallback_store)
 
-    def query_similar_chunks(self, query_vector: np.ndarray, top_k: int = 3, threshold: float = 0.78, exclude_doc_id: Optional[str] = None) -> List[Dict[str, Any]]:
+    def query_similar_chunks(self, query_vector: np.ndarray, top_k: int = 3, threshold: float = 0.30, exclude_doc_id: Optional[str] = None) -> List[Dict[str, Any]]:
         """
         Searches the vector database for nearest neighbor chunks based on cosine similarity.
         """
@@ -501,6 +570,41 @@ class CoreNLPMatcher:
         """Calculates cosine similarity between two unit-normalized dense vectors."""
         return float(np.dot(vec_a, vec_b))
 
+    @staticmethod
+    def longest_common_word_sequence(text_a: str, text_b: str) -> int:
+        """Finds length of longest consecutive matching word sequence."""
+        tokens_a = re.findall(r"\b\w+\b", (text_a or "").lower())
+        tokens_b = re.findall(r"\b\w+\b", (text_b or "").lower())
+        if not tokens_a or not tokens_b:
+            return 0
+        max_len = 0
+        limit = min(len(tokens_a), len(tokens_b), 30)
+        for n in range(3, limit + 1):
+            ngrams_b = {" ".join(tokens_b[i : i + n]) for i in range(len(tokens_b) - n + 1)}
+            found = any(" ".join(tokens_a[i : i + n]) in ngrams_b for i in range(len(tokens_a) - n + 1))
+            if found:
+                max_len = n
+            else:
+                break
+        return max_len
+
+    @staticmethod
+    def token_overlap_ratio(text_a: str, text_b: str) -> float:
+        """Calculates Szymkiewicz-Simpson overlap coefficient over content words."""
+        words_a = set(re.findall(r"\b\w+\b", (text_a or "").lower()))
+        words_b = set(re.findall(r"\b\w+\b", (text_b or "").lower()))
+        stopwords = {
+            "the", "a", "an", "is", "in", "and", "or", "of", "to", "with", "for",
+            "on", "at", "by", "from", "that", "this", "it", "as", "are", "was", "were",
+            "be", "been", "have", "has", "had", "do", "does", "did", "can", "could"
+        }
+        content_a = words_a - stopwords
+        content_b = words_b - stopwords
+        if not content_a or not content_b:
+            return 0.0
+        min_len = min(len(content_a), len(content_b))
+        return float(len(content_a & content_b) / min_len) if min_len > 0 else 0.0
+
     @classmethod
     def evaluate_match(
         cls,
@@ -509,32 +613,49 @@ class CoreNLPMatcher:
         candidate_text: str,
         candidate_vector: np.ndarray,
         source_metadata: Dict[str, Any],
-        exact_jaccard_threshold: float = 0.55,
-        paraphrase_cosine_threshold: float = 0.82
+        exact_jaccard_threshold: float = 0.20,
+        paraphrase_cosine_threshold: float = 0.45
     ) -> Optional[Dict[str, Any]]:
         """
-        Classifies match into 'exact_copy' or 'paraphrase' based on hybrid scoring.
+        Classifies match into 'exact_copy' or 'paraphrase' based on hybrid scoring:
+          - Consecutive matching word n-grams (5+ words for exact copy)
+          - Lexical Jaccard similarity (>= 0.20)
+          - Salient content token overlap (>= 0.25)
+          - Dense embedding semantic alignment (>= 0.45)
         """
         jaccard_score = cls.compute_jaccard_similarity(chunk_text, candidate_text, n=3)
         cosine_score = cls.compute_cosine_similarity(chunk_vector, candidate_vector)
+        consec_words = cls.longest_common_word_sequence(chunk_text, candidate_text)
+        token_overlap = cls.token_overlap_ratio(chunk_text, candidate_text)
 
         # Classification rule:
-        # - High Jaccard OR near-perfect Cosine => Exact Copy-Paste
-        # - Low Jaccard BUT high Cosine => Semantic Paraphrase
-        is_exact = (jaccard_score >= exact_jaccard_threshold) or (cosine_score >= 0.95)
-        is_paraphrase = (cosine_score >= paraphrase_cosine_threshold) and not is_exact
+        # - 5+ verbatim consecutive words, OR Jaccard >= threshold, OR near-perfect cosine => Exact Copy
+        is_exact = (consec_words >= 5) or (jaccard_score >= exact_jaccard_threshold) or (cosine_score >= 0.85)
+
+        # - Meaningful semantic alignment OR high content word overlap => Paraphrase Match
+        is_paraphrase = not is_exact and (
+            (consec_words >= 3) or
+            (token_overlap >= 0.25 and (cosine_score >= 0.18 or consec_words >= 3)) or
+            (cosine_score >= paraphrase_cosine_threshold) or
+            (token_overlap >= 0.35)
+        )
 
         if not (is_exact or is_paraphrase):
             return None
 
         match_type = "exact_copy" if is_exact else "paraphrase"
-        confidence_score = cosine_score if match_type == "paraphrase" else max(jaccard_score, cosine_score)
+        if match_type == "exact_copy":
+            confidence = max(0.75, min(0.99, max(jaccard_score * 2.0, cosine_score, token_overlap)))
+        else:
+            confidence = max(0.50, min(0.95, max(cosine_score, token_overlap * 0.85)))
 
         return {
             "match_type": match_type,
-            "confidence_score": round(confidence_score, 4),
-            "jaccard_lexical_similarity": round(jaccard_score, 4),
-            "cosine_semantic_similarity": round(cosine_score, 4),
+            "confidence_score": round(float(confidence), 4),
+            "jaccard_lexical_similarity": round(float(jaccard_score), 4),
+            "cosine_semantic_similarity": round(float(cosine_score), 4),
+            "consecutive_words_matched": consec_words,
+            "token_overlap_ratio": round(float(token_overlap), 4),
             "matched_chunk_text": chunk_text,
             "source_snippet": candidate_text,
             "source_title": source_metadata.get("source_title", "Unknown Source"),
@@ -599,17 +720,17 @@ class PlagiarismDetectionEngine:
         detailed_matches: List[Dict[str, Any]] = []
 
         # 2. Iterate and evaluate each chunk
-        max_web_queries = 5
+        max_web_queries = 10
         web_queries_done = 0
 
         for chunk_idx, (chunk_text, chunk_vec) in enumerate(zip(chunks, chunk_embeddings)):
             chunk_matched = False
 
-            # --- Check Internal Vector Database (Student-to-Student) ---
+            # --- Check Internal Vector Database (Student-to-Student & Institutional Literature) ---
             db_candidates = self.vector_db.query_similar_chunks(
                 query_vector=chunk_vec,
-                top_k=2,
-                threshold=0.78,
+                top_k=3,
+                threshold=0.30,
                 exclude_doc_id=document_id
             )
 
@@ -629,12 +750,12 @@ class PlagiarismDetectionEngine:
                     chunk_matched = True
                     break  # Found high-confidence internal match for this chunk
 
-            # --- Check Live Web Search (if enabled and not already an exact internal match) ---
+            # --- Check Live Web Search & Global Academic Repositories (Wikipedia, OpenAlex, arXiv) ---
             if enable_web_search and not chunk_matched and web_queries_done < max_web_queries:
                 if len(chunk_text.strip().split()) >= 6:
                     web_queries_done += 1
                     try:
-                        web_results = await self.web_client.query_web_for_chunk(chunk_text, top_k=2)
+                        web_results = await self.web_client.query_web_for_chunk(chunk_text, top_k=3)
                         for web_res in web_results:
                             snippet = web_res.get("snippet", "")
                             if not snippet:
@@ -648,7 +769,7 @@ class PlagiarismDetectionEngine:
                                 source_metadata={
                                     "source_title": web_res.get("title", "Internet Web Page"),
                                     "source_url": web_res.get("url"),
-                                    "source_category": "Internet Source"
+                                    "source_category": web_res.get("source_category", "Internet Source")
                                 }
                             )
                             if eval_result:
