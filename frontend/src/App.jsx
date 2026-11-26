@@ -10,7 +10,6 @@ import UploadComponent from './components/UploadComponent';
 import ScoreGauge from './components/ScoreGauge';
 import DocumentViewer from './components/DocumentViewer';
 import SourcesSidebar from './components/SourcesSidebar';
-import SvgBezierConnector from './components/SvgBezierConnector';
 import ReportStickyHeader from './components/ReportStickyHeader';
 import DiffModal from './components/DiffModal';
 import CitationAssistantModal from './components/CitationAssistantModal';
@@ -212,10 +211,7 @@ function MainApp() {
       ) : activeTab === 'report' && report ? (
         /* Report Screen: Turnitin Split-Screen Experience */
         <div className="flex-1 flex flex-col relative">
-          {/* 60fps GPU-Accelerated Dynamic Bezier Connector */}
-          <SvgBezierConnector />
-
-          {/* Sticky Top Header with Circular SVG Originality Gauge */}
+          {/* Sticky Top Header with Originality Gauge */}
           <ReportStickyHeader
             report={report}
             onNewScan={() => setActiveTab('scan')}

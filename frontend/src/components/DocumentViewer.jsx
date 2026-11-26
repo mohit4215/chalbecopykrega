@@ -3,16 +3,6 @@ import { FileText, Quote, X, Filter } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useUiStore } from '../store/useUiStore';
 
-/**
- * High-performance Document Originality Viewer (Screen B Left Column).
- * Linear-meets-Stripe enterprise standard:
- * - Asymmetric distraction-free reading pane
- * - Overlaid red underline/highlight for Exact Matches & amber for Paraphrase Matches
- * - Medium-style floating "Generate APA/MLA Citation" popover on text selection
- * - Source-specific highlight filtering
- * - Bi-directional auto-scroll synchronization
- * - 60fps Zustand micro-state hover tracking with Bezier curve connectors
- */
 export default function DocumentViewer({
   fullText,
   matches = [],
@@ -26,6 +16,15 @@ export default function DocumentViewer({
   const [fontSize, setFontSize] = useState('base'); // 'sm' | 'base' | 'lg'
   const [selectionPopover, setSelectionPopover] = useState(null);
   const activeHoverId = useUiStore((state) => state.activeHoverId);
+
+  // Map match IDs to their 1-based index for Turnitin-style numbered pill tags
+  const matchIndexMap = useMemo(() => {
+    const map = new Map();
+    matches.forEach((m, idx) => {
+      map.set(m.id, idx + 1);
+    });
+    return map;
+  }, [matches]);
 
   /**
    * Slices fullText into non-overlapping plain and highlighted segments
@@ -97,7 +96,7 @@ export default function DocumentViewer({
     }
   }, [selectedMatchId]);
 
-  // Medium-style floating selection popover handler
+  // Text selection for quick citation generator
   const handleMouseUp = useCallback(() => {
     const selection = window.getSelection();
     if (!selection || selection.isCollapsed) {
@@ -118,11 +117,11 @@ export default function DocumentViewer({
 
       if (rect && parentRect) {
         const left = rect.left - parentRect.left + rect.width / 2;
-        const top = rect.top - parentRect.top - 44;
+        const top = rect.top - parentRect.top - 42;
 
         setSelectionPopover({
           text,
-          left: Math.max(60, Math.min(parentRect.width - 60, left)),
+          left: Math.max(70, Math.min(parentRect.width - 70, left)),
           top: Math.max(10, top),
         });
       }
@@ -136,52 +135,32 @@ export default function DocumentViewer({
       onSelectMatch(match);
     }
 
-    // Auto-scroll the Right Pane to the matching source card
+    // Scroll to matching source card in right sidebar
     const sourceCardEl = document.getElementById(`source-card-${match.id}`);
     if (sourceCardEl) {
       sourceCardEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      sourceCardEl.classList.add('ring-2', 'ring-indigo-500', 'transition-all');
-      setTimeout(() => {
-        sourceCardEl.classList.remove('ring-2', 'ring-indigo-500');
-      }, 1500);
     }
-  };
-
-  const handleHighlightMouseEnter = (match) => {
-    const highlightEl = document.getElementById(`highlight-${match.id}`);
-    const cardEl = document.getElementById(`source-card-${match.id}`);
-    if (highlightEl && cardEl) {
-      const hRect = highlightEl.getBoundingClientRect();
-      const cRect = cardEl.getBoundingClientRect();
-      useUiStore.getState().setActiveHover(match.id, hRect, cRect);
-    } else {
-      useUiStore.getState().setActiveHover(match.id);
-    }
-  };
-
-  const handleHighlightMouseLeave = () => {
-    useUiStore.getState().clearActiveHover();
   };
 
   const getHighlightClass = (match, isSelected, isHovered, isFilteredOut) => {
     if (isFilteredOut) {
-      return 'opacity-25 grayscale hover:opacity-80 transition cursor-pointer px-1 py-0.5 rounded select-text';
+      return 'opacity-30 grayscale hover:opacity-80 transition cursor-pointer px-1 py-0.5 rounded select-text';
     }
 
     let base = 'cursor-pointer rounded px-1.5 py-0.5 transition-all duration-150 inline select-text font-medium ';
 
     if (match.match_type === 'exact_copy' || match.similarity_score >= 0.92) {
       base += isSelected || isHovered
-        ? 'bg-rose-500/25 text-rose-800 dark:text-rose-200 ring-2 ring-rose-600 underline decoration-rose-600 shadow-2xs '
-        : 'bg-rose-500/10 text-rose-700 dark:text-rose-300 border-b-2 border-rose-500 hover:bg-rose-500/20 underline decoration-rose-500 ';
+        ? 'bg-rose-200/80 dark:bg-rose-900/50 text-rose-950 dark:text-rose-100 ring-2 ring-rose-500 rounded '
+        : 'bg-rose-100/90 dark:bg-rose-950/40 text-rose-900 dark:text-rose-200 border-b-2 border-rose-500 hover:bg-rose-200/80 ';
     } else if (match.match_type === 'paraphrase') {
       base += isSelected || isHovered
-        ? 'bg-amber-500/25 text-amber-900 dark:text-amber-200 ring-2 ring-amber-600 underline decoration-amber-600 shadow-2xs '
-        : 'bg-amber-500/10 text-amber-800 dark:text-amber-300 border-b-2 border-amber-500 hover:bg-amber-500/20 ';
+        ? 'bg-amber-200/80 dark:bg-amber-900/50 text-amber-950 dark:text-amber-100 ring-2 ring-amber-500 rounded '
+        : 'bg-amber-100/90 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200 border-b-2 border-amber-500 hover:bg-amber-200/80 ';
     } else {
       base += isSelected || isHovered
-        ? 'bg-indigo-500/25 text-indigo-900 dark:text-indigo-200 ring-2 ring-indigo-600 underline decoration-indigo-600 shadow-2xs '
-        : 'bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border-b-2 border-indigo-500 hover:bg-indigo-500/20 ';
+        ? 'bg-sky-200/80 dark:bg-sky-900/50 text-sky-950 dark:text-sky-100 ring-2 ring-sky-500 rounded '
+        : 'bg-sky-100/90 dark:bg-sky-950/40 text-sky-900 dark:text-sky-200 border-b-2 border-sky-500 hover:bg-sky-200/80 ';
     }
 
     return base;
@@ -199,48 +178,48 @@ export default function DocumentViewer({
   };
 
   return (
-    <div className="bg-white dark:bg-zinc-900 rounded-xl shadow-2xs border border-zinc-200 dark:border-zinc-800 flex flex-col h-full overflow-hidden transition-colors">
+    <div className="bg-white dark:bg-slate-900 rounded-xl shadow-xs border border-slate-200 dark:border-slate-800 flex flex-col h-full overflow-hidden transition-colors">
       {/* Viewer Header */}
-      <div className="px-5 py-3 bg-zinc-50/70 dark:bg-zinc-900/60 border-b border-zinc-200 dark:border-zinc-800 flex flex-wrap items-center justify-between gap-3">
+      <div className="px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
-          <FileText className="w-4 h-4 text-zinc-500 dark:text-zinc-400" />
-          <span className="text-xs font-semibold uppercase tracking-wider text-zinc-700 dark:text-zinc-300 font-mono">
-            Document Viewer
+          <FileText className="w-4 h-4 text-slate-500 dark:text-slate-400" />
+          <span className="text-xs font-semibold text-slate-800 dark:text-slate-200">
+            Document Reader
           </span>
-          <span className="text-[11px] px-2 py-0.5 rounded font-mono bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-700 tabular-nums">
-            {matches.length} Matched Spans
+          <span className="text-[11px] px-2 py-0.5 rounded font-medium bg-slate-200/70 dark:bg-slate-700/60 text-slate-700 dark:text-slate-300">
+            {matches.length} {matches.length === 1 ? 'match' : 'matches'}
           </span>
         </div>
 
-        {/* Legend & Controls */}
-        <div className="flex items-center gap-4 text-xs font-medium text-zinc-600 dark:text-zinc-400">
+        {/* Legend & Zoom Controls */}
+        <div className="flex items-center gap-4 text-xs font-medium text-slate-600 dark:text-slate-400">
           <div className="hidden sm:flex items-center gap-3">
             <span className="flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-rose-500 inline-block"></span>
-              Exact Match
+              <span className="w-2.5 h-2.5 rounded-full bg-rose-500 inline-block"></span>
+              Exact Copy
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-amber-500 inline-block"></span>
+              <span className="w-2.5 h-2.5 rounded-full bg-amber-500 inline-block"></span>
               Paraphrased
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-indigo-500 inline-block"></span>
-              Web Citation
+              <span className="w-2.5 h-2.5 rounded-full bg-sky-500 inline-block"></span>
+              Web Match
             </span>
           </div>
 
-          {/* Font Size Zoom Controls */}
-          <div className="flex items-center border border-zinc-200 dark:border-zinc-700 rounded-lg overflow-hidden p-0.5 bg-white dark:bg-zinc-800">
+          {/* Text Zoom */}
+          <div className="flex items-center border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden p-0.5 bg-white dark:bg-slate-800">
             <button
               type="button"
               onClick={() => setFontSize('sm')}
               className={cn(
-                'px-2 py-0.5 text-[11px] font-semibold rounded transition',
+                'px-2 py-0.5 text-xs font-medium rounded transition',
                 fontSize === 'sm'
-                  ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900'
-                  : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'
+                  ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900'
+                  : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
               )}
-              title="Small text"
+              title="Small text size"
             >
               A-
             </button>
@@ -248,12 +227,12 @@ export default function DocumentViewer({
               type="button"
               onClick={() => setFontSize('base')}
               className={cn(
-                'px-2 py-0.5 text-[11px] font-semibold rounded transition',
+                'px-2 py-0.5 text-xs font-medium rounded transition',
                 fontSize === 'base'
-                  ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900'
-                  : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'
+                  ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900'
+                  : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
               )}
-              title="Standard text"
+              title="Default text size"
             >
               A
             </button>
@@ -261,12 +240,12 @@ export default function DocumentViewer({
               type="button"
               onClick={() => setFontSize('lg')}
               className={cn(
-                'px-2 py-0.5 text-[11px] font-semibold rounded transition',
+                'px-2 py-0.5 text-xs font-medium rounded transition',
                 fontSize === 'lg'
-                  ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900'
-                  : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'
+                  ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900'
+                  : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
               )}
-              title="Large text"
+              title="Large text size"
             >
               A+
             </button>
@@ -274,35 +253,34 @@ export default function DocumentViewer({
         </div>
       </div>
 
-      {/* Active Source Filter Banner */}
+      {/* Filter Banner if active */}
       {activeFilteredSource && (
-        <div className="px-5 py-2 bg-indigo-500/10 border-b border-indigo-500/20 flex items-center justify-between text-xs text-indigo-700 dark:text-indigo-300">
+        <div className="px-5 py-2 bg-indigo-50 dark:bg-indigo-950/40 border-b border-indigo-200 dark:border-indigo-900 flex items-center justify-between text-xs text-indigo-700 dark:text-indigo-300">
           <div className="flex items-center gap-2 truncate">
             <Filter className="w-3.5 h-3.5 shrink-0" />
-            <span className="font-semibold">Filtering highlights from source:</span>
-            <span className="font-mono truncate">{activeFilteredSource.source_title}</span>
+            <span className="font-medium">Filtered to:</span>
+            <span className="font-semibold truncate">{activeFilteredSource.source_title}</span>
           </div>
           {onClearFilter && (
             <button
               type="button"
               onClick={onClearFilter}
-              className="flex items-center gap-1 px-2 py-0.5 rounded bg-indigo-500/20 hover:bg-indigo-500/30 text-[11px] font-semibold transition shrink-0 ml-3"
+              className="flex items-center gap-1 px-2 py-0.5 rounded bg-indigo-100 dark:bg-indigo-900/60 hover:bg-indigo-200 text-[11px] font-semibold transition shrink-0 ml-3"
             >
               <X className="w-3 h-3" />
-              <span>Clear Filter</span>
+              <span>Reset Filter</span>
             </button>
           )}
         </div>
       )}
 
-      {/* Main Document Body */}
+      {/* Main Document Reading Sheet */}
       <div
         ref={containerRef}
         onMouseUp={handleMouseUp}
-        onScroll={() => useUiStore.getState().clearActiveHover()}
-        className="relative flex-1 overflow-y-auto p-6 sm:p-10 font-serif text-zinc-800 dark:text-zinc-200 select-text"
+        className="relative flex-1 overflow-y-auto p-6 sm:p-10 font-serif text-slate-800 dark:text-slate-200 select-text bg-white dark:bg-slate-900"
       >
-        {/* Floating Medium-style Citation Assistant Popover */}
+        {/* Floating Citation Popover */}
         {selectionPopover && (
           <div
             style={{
@@ -311,7 +289,7 @@ export default function DocumentViewer({
               top: `${selectionPopover.top}px`,
               transform: 'translateX(-50%)',
             }}
-            className="z-50 pointer-events-auto animate-in fade-in zoom-in-95 duration-100"
+            className="z-50 pointer-events-auto"
           >
             <button
               type="button"
@@ -320,26 +298,28 @@ export default function DocumentViewer({
                   onGenerateCitation({
                     matched_text: selectionPopover.text,
                     source_title: 'Highlighted Manuscript Excerpt',
-                    source_author: 'Student / Manuscript',
+                    source_author: 'Author',
                   });
                 }
                 setSelectionPopover(null);
                 window.getSelection()?.removeAllRanges();
               }}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-zinc-900 text-white dark:bg-white dark:text-zinc-900 text-xs font-semibold shadow-xl border border-zinc-700 dark:border-zinc-300 hover:scale-105 active:scale-95 transition-all select-none"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-900 text-white dark:bg-white dark:text-slate-900 text-xs font-semibold shadow-md border border-slate-700 dark:border-slate-300 hover:scale-105 transition-all select-none"
             >
               <Quote className="w-3.5 h-3.5 text-indigo-400 dark:text-indigo-600" />
-              <span>Generate APA/MLA Citation</span>
+              <span>Create Citation</span>
             </button>
           </div>
         )}
 
+        {/* Document Content Canvas */}
         <div className={cn('max-w-3xl mx-auto whitespace-pre-wrap', fontSizes[fontSize])}>
           {textSegments.map((seg) => {
             if (seg.type === 'plain') {
               return <span key={seg.key}>{seg.text}</span>;
             }
 
+            const matchIndex = matchIndexMap.get(seg.match.id) || 1;
             const isSelected = selectedMatchId === seg.match.id;
             const isHovered = activeHoverId === seg.match.id;
             const isFilteredOut = Boolean(
@@ -353,11 +333,14 @@ export default function DocumentViewer({
                 key={seg.key}
                 id={`highlight-${seg.match.id}`}
                 onClick={() => handleHighlightClick(seg.match)}
-                onMouseEnter={() => handleHighlightMouseEnter(seg.match)}
-                onMouseLeave={handleHighlightMouseLeave}
+                onMouseEnter={() => useUiStore.getState().setActiveHover(seg.match.id)}
+                onMouseLeave={() => useUiStore.getState().clearActiveHover()}
                 className={getHighlightClass(seg.match, isSelected, isHovered, isFilteredOut)}
-                title={`Click to inspect matching source: ${seg.match.source_title} (${(seg.match.similarity_score * 100).toFixed(0)}% match)`}
+                title={`Match [${matchIndex}]: ${seg.match.source_title} (${(seg.match.similarity_score * 100).toFixed(0)}% overlap)`}
               >
+                <span className="inline-flex items-center justify-center text-[10px] font-sans font-bold px-1 py-0.2 mr-1 rounded bg-slate-800 text-white dark:bg-slate-200 dark:text-slate-900 select-none">
+                  {matchIndex}
+                </span>
                 {seg.text}
               </mark>
             );
