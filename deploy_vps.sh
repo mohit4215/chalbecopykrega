@@ -1,22 +1,23 @@
 #!/bin/bash
-set -e
+set -euo pipefail
 
 # ==============================================================================
-# Automated Production VPS Deployment Script for Turnitin Plagiarism Engine
-# Supports Ubuntu 20.04 / 22.04 / 24.04, Debian 11/12
+# Automated Production VPS Deployment Script for Poach Originality Engine
+# Target Platforms: Ubuntu 20.04 / 22.04 / 24.04, Debian 11/12
+# Stack: PostgreSQL (pgvector) + Redis + Qdrant + FastAPI + Celery + Nginx
 # ==============================================================================
 
 echo "========================================================"
-echo " Starting Turnitin Plagiarism System Production Deployment"
+echo " Starting Poach Production Deployment"
 echo "========================================================"
 
 # 1. Update system packages
 sudo apt-get update -y
 sudo apt-get install -y curl git ufw jq ca-certificates gnupg
 
-# 2. Install Docker if not present
+# 2. Install Docker & Compose plugin if not present
 if ! command -v docker &> /dev/null; then
-    echo "[+] Installing Docker Engine..."
+    echo "[+] Installing Docker Engine & Compose..."
     sudo install -m 0755 -d /etc/apt/keyrings
     curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg --yes
     sudo chmod a+r /etc/apt/keyrings/docker.gpg
@@ -46,36 +47,53 @@ if [ -d "$APP_DIR" ]; then
 else
     echo "[+] Cloning repository into $APP_DIR..."
     sudo git clone "$REPO_URL" "$APP_DIR"
-    sudo chown -R $USER:$USER "$APP_DIR"
+    sudo chown -R "$USER":"$USER" "$APP_DIR"
     cd "$APP_DIR"
 fi
 
-# 4. Configure firewall rules for production
+# 4. Initialize production environment configuration
+if [ ! -f .env ]; then
+    echo "[+] Creating .env from .env.example..."
+    cp .env.example .env
+    # Generate cryptographic JWT Secret Key
+    RANDOM_JWT_KEY=$(python3 -c "import secrets; print(secrets.token_urlsafe(48))" 2>/dev/null || openssl rand -base64 48)
+    sed -i "s|^JWT_SECRET_KEY=.*|JWT_SECRET_KEY=${RANDOM_JWT_KEY}|g" .env
+    echo "[✓] Cryptographic secrets generated."
+fi
+
+# 5. Configure firewall rules for production
 if command -v ufw &> /dev/null; then
     echo "[+] Ensuring firewall allows HTTP/HTTPS and SSH..."
     sudo ufw allow 22/tcp || true
     sudo ufw allow 80/tcp || true
     sudo ufw allow 443/tcp || true
     sudo ufw allow 8000/tcp || true
-    sudo ufw allow 3000/tcp || true
 fi
 
-# 5. Build and launch with Docker Compose
-echo "[+] Booting PostgreSQL (pgvector) and FastAPI backend containers..."
+# 6. Build and launch all containerized services
+echo "[+] Booting full production stack (PostgreSQL + Redis + Qdrant + Backend + Worker + Nginx)..."
 docker compose down || true
 docker compose up -d --build
 
-# 6. Verify healthcheck
+# 7. Apply Alembic database migrations
+echo "[+] Running database schema migrations..."
+sleep 6
+docker compose exec backend alembic upgrade head || echo "[!] Database initialized via startup lifespan."
+
+# 8. Verify healthcheck and readiness probes
 echo "[+] Waiting for service health checks..."
 sleep 8
 
 if curl -s http://localhost:8000/api/health | grep -q "healthy"; then
+    SERVER_IP=$(curl -s ifconfig.me || echo "localhost")
     echo "========================================================"
     echo " [✓] PRODUCTION DEPLOYMENT SUCCESSFUL!"
-    echo " Backend API: http://$(curl -s ifconfig.me):8000"
-    echo " API Documentation: http://$(curl -s ifconfig.me):8000/docs"
+    echo " Web Application (Nginx): http://${SERVER_IP}"
+    echo " Backend API Endpoint:    http://${SERVER_IP}:8000/api/health"
+    echo " API Documentation:       http://${SERVER_IP}:8000/docs"
+    echo " Qdrant Dashboard:        http://${SERVER_IP}:6333/dashboard"
     echo "========================================================"
 else
-    echo "[!] Containers started. Checking logs..."
-    docker compose logs --tail=20
+    echo "[!] Deployment check returned unexpected output. Inspecting container logs..."
+    docker compose logs --tail=30
 fi

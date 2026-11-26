@@ -23,8 +23,10 @@ engine_kwargs = {"echo": False, "future": True}
 if "sqlite" in ASYNC_DATABASE_URL:
     engine_kwargs["connect_args"] = {"check_same_thread": False}
 else:
-    engine_kwargs["pool_size"] = 10
-    engine_kwargs["max_overflow"] = 20
+    engine_kwargs["pool_size"] = int(os.getenv("DB_POOL_SIZE", "15"))
+    engine_kwargs["max_overflow"] = int(os.getenv("DB_MAX_OVERFLOW", "25"))
+    engine_kwargs["pool_pre_ping"] = True
+    engine_kwargs["pool_recycle"] = 3600
 
 async_engine = create_async_engine(ASYNC_DATABASE_URL, **engine_kwargs)
 

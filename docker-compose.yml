@@ -1,13 +1,38 @@
 version: '3.8'
 
 # ==============================================================================
-# Production Docker Compose Orchestration
-# Stack: Qdrant Vector DB + FastAPI Backend + React Nginx Reverse Proxy
+# Production Docker Compose Orchestration - Poach Academic Originality Engine
+# Full Stack: PostgreSQL (pgvector) + Redis (LRU) + Qdrant Vector DB +
+#             FastAPI Backend + Celery Worker + Nginx API Gateway / Frontend
 # ==============================================================================
 
 services:
   # ----------------------------------------------------------------------------
-  # 1. Distributed Cache & Rate Limiter (Redis)
+  # 1. Primary Relational Database (PostgreSQL 16 + pgvector)
+  # ----------------------------------------------------------------------------
+  db:
+    image: ankane/pgvector:v0.7.4-pg16
+    container_name: plagiarism_db
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgrespassword}
+      POSTGRES_DB: ${POSTGRES_DB:-plagiarism_db}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - plagiarism_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-plagiarism_db} || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ----------------------------------------------------------------------------
+  # 2. Distributed Cache, Celery Broker & Rate Limiter (Redis 7.2)
   # ----------------------------------------------------------------------------
   redis:
     image: redis:7.2-alpine
@@ -28,7 +53,7 @@ services:
       start_period: 5s
 
   # ----------------------------------------------------------------------------
-  # 2. Vector Database Service (Qdrant)
+  # 3. High-Performance Vector Database (Qdrant)
   # ----------------------------------------------------------------------------
   vector-db:
     image: qdrant/qdrant:v1.8.4
@@ -53,7 +78,7 @@ services:
       start_period: 15s
 
   # ----------------------------------------------------------------------------
-  # 3. FastAPI NLP & Plagiarism Detection Backend
+  # 4. FastAPI NLP & Plagiarism Detection Backend
   # ----------------------------------------------------------------------------
   backend:
     build:
@@ -62,23 +87,34 @@ services:
     container_name: plagiarism_backend
     restart: always
     depends_on:
-      vector-db:
+      db:
         condition: service_healthy
       redis:
         condition: service_healthy
+      vector-db:
+        condition: service_healthy
     environment:
       - PORT=8000
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgrespassword}@db:5432/${POSTGRES_DB:-plagiarism_db}
       - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/1
       - QDRANT_URL=http://vector-db:6333
       - QDRANT_COLLECTION_NAME=student_submissions
       - USE_IN_MEMORY_FALLBACK=false
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-supersecretjwtkeyforproductionreplaceinproduction}
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost,http://localhost:80,http://localhost:8000}
       - SERPAPI_API_KEY=${SERPAPI_API_KEY:-}
       - BING_SEARCH_API_KEY=${BING_SEARCH_API_KEY:-}
+      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY:-}
+      - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET:-}
       - EMBEDDING_MODEL_NAME=sentence-transformers/all-MiniLM-L6-v2
       - HF_HOME=/app/cache/huggingface
       - ENABLE_OCR=true
+      - DB_POOL_SIZE=15
+      - DB_MAX_OVERFLOW=25
     volumes:
-      # Persistent cache for SentenceTransformer model weights
+      # Persistent cache for SentenceTransformer & ONNX model weights
       - model_cache:/app/cache/huggingface
     networks:
       - plagiarism_network
@@ -90,26 +126,30 @@ services:
       start_period: 30s
 
   # ----------------------------------------------------------------------------
-  # 4. Celery Distributed Task Worker (Async Document Ingestion & Plagiarism Analysis)
+  # 5. Celery Distributed Task Worker (Async Document Ingestion & Plagiarism Analysis)
   # ----------------------------------------------------------------------------
   celery_worker:
     build:
       context: ./backend
       dockerfile: Dockerfile
     container_name: plagiarism_celery_worker
-    command: celery -A app.tasks.celery_worker.celery_app worker --loglevel=info --concurrency=2
+    command: celery -A app.tasks.celery_worker.celery_app worker --loglevel=info --concurrency=4
     restart: always
     depends_on:
+      db:
+        condition: service_healthy
       redis:
         condition: service_healthy
       vector-db:
         condition: service_healthy
     environment:
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgrespassword}@db:5432/${POSTGRES_DB:-plagiarism_db}
       - REDIS_URL=redis://redis:6379/0
       - CELERY_BROKER_URL=redis://redis:6379/0
-      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/1
       - QDRANT_URL=http://vector-db:6333
       - QDRANT_COLLECTION_NAME=student_submissions
+      - USE_IN_MEMORY_FALLBACK=false
       - SERPAPI_API_KEY=${SERPAPI_API_KEY:-}
       - BING_SEARCH_API_KEY=${BING_SEARCH_API_KEY:-}
       - EMBEDDING_MODEL_NAME=sentence-transformers/all-MiniLM-L6-v2
@@ -121,7 +161,7 @@ services:
       - plagiarism_network
 
   # ----------------------------------------------------------------------------
-  # 5. React Frontend & Nginx API Gateway Reverse Proxy
+  # 6. React Frontend & Nginx API Gateway Reverse Proxy
   # ----------------------------------------------------------------------------
   frontend:
     build:
@@ -156,6 +196,8 @@ networks:
 # Persistent Data Volumes
 # ------------------------------------------------------------------------------
 volumes:
+  postgres_data:
+    name: plagiarism_postgres_data
   redis_data:
     name: plagiarism_redis_data
   qdrant_storage:

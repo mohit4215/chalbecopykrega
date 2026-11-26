@@ -2170,6 +2170,7 @@ async def readiness_probe(db: AsyncSession = Depends(get_db_session)):
     }
 
 @app.get("/health")
+@app.get("/health", include_in_schema=False)
 @app.get("/api/health")
 async def health_check():
     return {

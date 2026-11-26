@@ -22,6 +22,8 @@ def test_alembic_config_and_metadata():
     assert "users" in table_names
     assert "scan_history" in table_names
     assert "feedback" in table_names
+    assert "api_keys" in table_names
+    assert "repository_documents" in table_names
 
 
 def test_backup_and_restore_scripts_exist_and_executable():
